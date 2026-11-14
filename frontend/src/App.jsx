@@ -9,6 +9,8 @@ import Notifications from "./pages/Notifications";
 import Connections from "./pages/Connections";
 import PostDetail from "./pages/PostDetail";
 import CreatePost from "./pages/CreatePost";
+import Projects from "./pages/Projects";
+import ProjectWorkspace from "./pages/ProjectWorkspace";
 import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./context/useAuth";
 
@@ -38,6 +40,8 @@ function AppRoutes() {
       <Route path="/profile/:id" element={<ProtectedRoute><PublicProfile /></ProtectedRoute>} />
       <Route path="/post/:id" element={<ProtectedRoute><PostDetail /></ProtectedRoute>} />
       <Route path="/explore" element={<ProtectedRoute><Explore /></ProtectedRoute>} />
+      <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+      <Route path="/projects/:id" element={<ProtectedRoute><ProjectWorkspace /></ProtectedRoute>} />
       <Route path="/connections" element={<ProtectedRoute><Connections /></ProtectedRoute>} />
       <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />

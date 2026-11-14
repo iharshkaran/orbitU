@@ -4,17 +4,19 @@ import {
   Bell,
   Check,
   FileText,
+  FolderKanban,
   Heart,
   MessageCircle,
   UserPlus,
   X,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { notificationTime } from "../utils/socialStore";
 import { api } from "../utils/api";
 import { useConnectlyStore } from "../store/useConnectlyStore";
 
-const iconMap = { connection: UserPlus, like: Heart, comment: MessageCircle, system: Award };
+const iconMap = { connection: UserPlus, like: Heart, comment: MessageCircle, project: FolderKanban, system: Award };
 const loadNotificationData = (force = false) => Promise.all([useConnectlyStore.getState().loadNotifications(force), useConnectlyStore.getState().loadConnections(force)]);
 
 export default function Notifications() {
@@ -134,6 +136,7 @@ export default function Notifications() {
                   <p className="text-sm font-semibold">{item.title}</p>
                   <p className="mt-1 text-sm leading-6 text-[#514e62]">{item.message}</p>
                   <p className="mt-2 text-xs text-[#858191]">{notificationTime(item.createdAt)}</p>
+                  {item.projectId && <Link to={`/projects/${item.projectId}`} onClick={() => { if (!item.read) markRead(item.id); }} className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#d9cffb] bg-[#eee9ff] px-3 py-2 text-xs font-bold text-[#5947a8] hover:bg-[#e4dcff]">Open project workspace</Link>}
                 </div>
                 <div className="flex shrink-0 items-start gap-1">
                   {!item.read && <button type="button" disabled={busyId === item.id} onClick={() => markRead(item.id)} aria-label="Mark notification as read" className="rounded-lg p-2 text-[#858191] hover:bg-[#f4f0e8] hover:text-[#6f56d9] disabled:opacity-50"><Check size={16} /></button>}
@@ -142,7 +145,7 @@ export default function Notifications() {
               </article>
             );
           })}
-          {!loading && items.length === 0 && <div className="px-6 py-16 text-center"><span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-[#191a32] bg-[#fff3b7] text-[#5947a8] shadow-[3px_4px_0_#191a32]"><Bell size={30} /></span><h2 className="mt-5 font-bold">No recent activity</h2><p className="mt-2 text-sm text-[#858191]">Likes, comments and connection updates will show up here.</p></div>}
+          {!loading && items.length === 0 && <div className="px-6 py-16 text-center"><span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-[#191a32] bg-[#fff3b7] text-[#5947a8] shadow-[3px_4px_0_#191a32]"><Bell size={30} /></span><h2 className="mt-5 font-bold">No recent activity</h2><p className="mt-2 text-sm text-[#858191]">Likes, comments, connection and project team updates will show up here.</p></div>}
         </section>
       </main>
     </div>

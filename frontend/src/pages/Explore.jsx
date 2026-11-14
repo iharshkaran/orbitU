@@ -14,6 +14,7 @@ import {
   Code2,
   Users,
   School,
+  FolderKanban,
 } from "lucide-react";
 
 const filters = ["All", "B.Tech", "B.E.", "BCA", "B.Sc", "BBA", "M.Tech", "MCA"];
@@ -129,9 +130,14 @@ export default function Explore() {
                 Discover students, share what you are building, and meet people who make your next idea better.
               </p>
             </div>
-            <Link to="/connections" className="inline-flex w-fit shrink-0 items-center gap-2 rounded-xl border-2 border-[#191a32] bg-white px-4 py-2.5 text-sm font-semibold text-[#17182d] shadow-[0_3px_0_#c9bcff] transition hover:-translate-y-0.5">
-              <Users size={16} /> Manage connections
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/projects" className="inline-flex w-fit shrink-0 items-center gap-2 rounded-xl border-2 border-[#191a32] bg-[#ffe35b] px-4 py-2.5 text-sm font-bold text-[#17182d] shadow-[0_3px_0_#191a32] transition hover:-translate-y-0.5">
+                <FolderKanban size={16} /> Find project teams
+              </Link>
+              <Link to="/connections" className="inline-flex w-fit shrink-0 items-center gap-2 rounded-xl border-2 border-[#191a32] bg-white px-4 py-2.5 text-sm font-semibold text-[#17182d] shadow-[0_3px_0_#c9bcff] transition hover:-translate-y-0.5">
+                <Users size={16} /> Manage connections
+              </Link>
+            </div>
         </section>
 
         {connections.incoming.length > 0 && (

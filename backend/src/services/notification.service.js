@@ -1,8 +1,8 @@
 import Notification from "../models/Notification.js";
 
-export async function createNotification({ recipient, actor = null, type = "system", message, post = null, connection = null }) {
+export async function createNotification({ recipient, actor = null, type = "system", message, post = null, connection = null, project = null }) {
   if (!recipient || (actor && String(recipient) === String(actor))) return null;
-  return Notification.create({ recipient, actor, type, message, post, connection });
+  return Notification.create({ recipient, actor, type, message, post, connection, project });
 }
 
 export async function listNotifications(userId) {
@@ -13,9 +13,9 @@ export async function listNotifications(userId) {
     .lean();
   return notifications.map((notification) => ({
     id: String(notification._id), type: notification.type,
-    title: notification.type === "connection" ? "Connection update" : notification.type === "like" ? "New like" : notification.type === "comment" ? "New comment" : "Connectly",
+    title: notification.type === "connection" ? "Connection update" : notification.type === "like" ? "New like" : notification.type === "comment" ? "New comment" : notification.type === "project" ? "Project team update" : "Connectly",
     message: notification.message, name: notification.actor?.name || "Connectly",
-    photo: notification.actor?.photo || "", read: notification.read, createdAt: notification.createdAt,
+    photo: notification.actor?.photo || "", projectId: notification.project ? String(notification.project) : "", read: notification.read, createdAt: notification.createdAt,
   }));
 }
 

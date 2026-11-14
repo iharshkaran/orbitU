@@ -25,8 +25,9 @@ OrbitU is a student-focused professional community for sharing work, building a 
 
 - **Accounts:** register, log in, keep a session, and log out.
 - **Student profiles:** headline, course, year, university, location, bio, skills, profile photo, banner, portfolio link, education, projects, and featured items.
-- **Feed:** publish text updates, categorized posts, images, videos, and PDF documents; like and comment on posts; open an individual post; and delete your own posts.
+- **Feed:** publish and edit text updates, categorized posts, images, videos, and PDF documents; like and comment on posts; open an individual post; and delete your own posts.
 - **Explore:** search student profiles and browse paginated results by course and skills.
+- **Project collaboration:** publish project openings with required skills, team roles, and team size; discover matching projects; request to join; and accept or decline applicants. Accepted teams get a private workspace with a task board, assignees, due dates, milestones, completion progress, team activity history, and in-app notifications for teammate updates.
 - **Connections:** send, accept, or decline requests; see pending and accepted connections; and remove a connection.
 - **Messages:** inbox and conversation history for accepted connections.
 - **Notifications:** view, mark as read, dismiss, or clear notifications.
@@ -182,10 +183,27 @@ All routes below use the `/api` prefix unless shown otherwise. Protected routes 
 | `GET` | `/api/connections` | Yes | List incoming, sent, and accepted connections |
 | `PATCH` | `/api/connections/:id` | Yes | Accept or decline a request (`{ "action": "accept" }` or `"decline"`) |
 | `DELETE` | `/api/connections/:id` | Yes | Remove a connection |
+| `GET` | `/api/projects?q=` | Yes | Search open collaboration projects by title, description, skill, or role |
+| `GET` | `/api/projects/mine` | Yes | List projects you own with their join requests |
+| `GET` | `/api/projects/teams` | Yes | List projects where you are an accepted teammate |
+| `GET` | `/api/projects/requests/count` | Yes | Count pending project join requests for the current user |
+| `POST` | `/api/projects` | Yes | Publish a project opening |
+| `PATCH` | `/api/projects/:id` | Yes, owner only | Edit project details, close/reopen recruiting, or mark the project complete |
+| `DELETE` | `/api/projects/:id` | Yes, owner only | Permanently delete the project, workspace and its project notifications |
+| `POST` | `/api/projects/:id/requests` | Yes | Request to join a project (`{ "message": "..." }`) |
+| `PATCH` | `/api/projects/:id/requests/:requestId` | Yes | Accept or reject a join request (`{ "action": "accept" }` or `"reject"`) |
+| `GET` | `/api/projects/:id/workspace` | Yes | Get project workspace; only the owner and accepted teammates can access it |
+| `POST` | `/api/projects/:id/milestones` | Yes | Add a milestone (`{ "title": "...", "dueDate": "YYYY-MM-DD" }`) |
+| `PATCH` | `/api/projects/:id/milestones/:milestoneId` | Yes | Update milestone title, due date, or status |
+| `DELETE` | `/api/projects/:id/milestones/:milestoneId` | Yes | Delete a milestone and detach its tasks |
+| `POST` | `/api/projects/:id/tasks` | Yes | Add a task with optional description, assignee, milestone, and due date |
+| `PATCH` | `/api/projects/:id/tasks/:taskId` | Yes | Update task title, details, status, assignee, milestone, or due date |
+| `DELETE` | `/api/projects/:id/tasks/:taskId` | Yes | Delete a task from a project workspace |
 | `GET` | `/api/posts?page=&limit=` | Yes | Paginated feed |
 | `POST` | `/api/posts` | Yes | Create a post |
 | `GET` | `/api/posts/:id` | Yes | Get one post, its likes, and comments |
 | `DELETE` | `/api/posts/:id` | Yes | Delete your own post |
+| `PATCH` | `/api/posts/:id` | Yes | Edit your own post caption or category |
 | `POST` | `/api/posts/:id/like` | Yes | Toggle a like |
 | `GET` | `/api/posts/:postId/comments` | Yes | List post comments |
 | `POST` | `/api/posts/:postId/comments` | Yes | Add a comment (`{ "text": "..." }`) |

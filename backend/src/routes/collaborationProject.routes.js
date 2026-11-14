@@ -1,0 +1,26 @@
+import { Router } from "express";
+import { addCollaborationProject, addMilestone, addTask, applyToProject, editCollaborationProject, editMilestone, editTask, getCollaborationProjects, getJoinedCollaborationProjects, getMyCollaborationProjects, getPendingProjectRequestCount, getWorkspace, handleProjectRequest, removeCollaborationProject, removeMilestone, removeTask } from "../controllers/collaborationProject.controller.js";
+import { asyncHandler } from "../middleware/async.middleware.js";
+import { requireAuth } from "../middleware/auth.middleware.js";
+import { validate, validateParams } from "../middleware/validate.middleware.js";
+import { joinRequestSchema, listQuerySchema, milestoneIdParamsSchema, milestoneSchema, milestoneUpdateSchema, projectIdSchema, projectSchema, projectUpdateSchema, requestDecisionSchema, requestParamsSchema, taskIdParamsSchema, taskSchema, taskUpdateSchema, workspaceIdParamsSchema } from "../validators/collaborationProject.validator.js";
+
+const router = Router();
+router.use(requireAuth);
+router.get("/requests/count", asyncHandler(getPendingProjectRequestCount));
+router.get("/mine", asyncHandler(getMyCollaborationProjects));
+router.get("/teams", asyncHandler(getJoinedCollaborationProjects));
+router.get("/", validate(listQuerySchema, "query"), asyncHandler(getCollaborationProjects));
+router.post("/", validate(projectSchema), asyncHandler(addCollaborationProject));
+router.patch("/:id", validateParams(projectIdSchema), validate(projectUpdateSchema), asyncHandler(editCollaborationProject));
+router.delete("/:id", validateParams(projectIdSchema), asyncHandler(removeCollaborationProject));
+router.post("/:id/requests", validateParams(projectIdSchema), validate(joinRequestSchema), asyncHandler(applyToProject));
+router.patch("/:id/requests/:requestId", validateParams(requestParamsSchema), validate(requestDecisionSchema), asyncHandler(handleProjectRequest));
+router.get("/:id/workspace", validateParams(workspaceIdParamsSchema), asyncHandler(getWorkspace));
+router.post("/:id/milestones", validateParams(projectIdSchema), validate(milestoneSchema), asyncHandler(addMilestone));
+router.patch("/:id/milestones/:milestoneId", validateParams(milestoneIdParamsSchema), validate(milestoneUpdateSchema), asyncHandler(editMilestone));
+router.delete("/:id/milestones/:milestoneId", validateParams(milestoneIdParamsSchema), asyncHandler(removeMilestone));
+router.post("/:id/tasks", validateParams(projectIdSchema), validate(taskSchema), asyncHandler(addTask));
+router.patch("/:id/tasks/:taskId", validateParams(taskIdParamsSchema), validate(taskUpdateSchema), asyncHandler(editTask));
+router.delete("/:id/tasks/:taskId", validateParams(taskIdParamsSchema), asyncHandler(removeTask));
+export default router;

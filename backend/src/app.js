@@ -12,6 +12,7 @@ import reportRoutes from "./routes/report.routes.js";
 import messageRoutes from "./routes/message.routes.js";
 import healthRoutes from "./routes/health.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
+import collaborationProjectRoutes from "./routes/collaborationProject.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js";
 
 const app = express();
@@ -35,6 +36,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/connections", connectionRoutes);
 app.use("/api/posts", postRoutes);
+app.use("/api/projects", collaborationProjectRoutes);
 app.use("/api/posts/:postId/comments", commentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/messages", messageRoutes);

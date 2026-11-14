@@ -9,6 +9,7 @@ import {
   LogOut,
   ChevronDown,
   Plus,
+  FolderKanban,
 } from "lucide-react";
 import { useConnectlyStore } from "../store/useConnectlyStore";
 import { api } from "../utils/api";
@@ -17,6 +18,7 @@ import { useAuth } from "../context/useAuth";
 const navItems = [
   { label: "Home", path: "/home", icon: Home },
   { label: "Explore", path: "/explore", icon: Search },
+  { label: "Projects", path: "/projects", icon: FolderKanban },
   { label: "Messages", path: "/messages", icon: MessageCircle },
   { label: "Notifications", path: "/notifications", icon: Bell },
 ];
@@ -31,6 +33,7 @@ export default function Navbar() {
   const mobileProfileMenuRef = useRef(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [incomingRequests, setIncomingRequests] = useState(0);
+  const [pendingProjectRequests, setPendingProjectRequests] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [activityToast, setActivityToast] = useState(null);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -56,27 +59,39 @@ export default function Navbar() {
     let active = true;
     let hasBaseline = false;
     let previousRequests = 0;
+    let previousProjectRequests = 0;
     let previousUnreadMessages = 0;
+    let previousProjectUpdates = 0;
     let toastTimer;
     const refreshUnread = async () => {
       try {
         const store = useConnectlyStore.getState();
-        const [notifications, network, inbox] = await Promise.all([store.loadNotifications(), store.loadConnections(), store.loadInbox()]);
+        const [notifications, network, inbox, projectRequestCount] = await Promise.all([store.loadNotifications(), store.loadConnections(), store.loadInbox(), api.pendingProjectRequestCount()]);
         const requestCount = network.incoming.length;
         const messageCount = inbox.reduce((total, chat) => total + chat.unreadCount, 0);
         const notificationCount = notifications.filter((item) => !item.read).length;
+        const projectUpdates = notifications.filter((item) => item.type === "project" && !item.read);
+        const projectRequestTotal = projectRequestCount.count || 0;
         if (!active) return;
-        if (hasBaseline && requestCount > previousRequests) {
+        if (hasBaseline && projectRequestTotal > previousProjectRequests) {
+          setActivityToast({ path: "/projects", text: "Someone requested to join your project" });
+        } else if (hasBaseline && requestCount > previousRequests) {
           const requester = network.incoming[0]?.name;
           setActivityToast({ path: "/explore", text: requester ? `${requester} sent you a connection request` : "You have a new connection request" });
+        } else if (hasBaseline && projectUpdates.length > previousProjectUpdates) {
+          const update = projectUpdates[0];
+          setActivityToast({ path: update.projectId ? `/projects/${update.projectId}` : "/notifications", text: "Your project team has a new update" });
         } else if (hasBaseline && messageCount > previousUnreadMessages) {
           const sender = inbox.find((chat) => chat.unreadCount > 0)?.name;
           setActivityToast({ path: "/messages", text: sender ? `New message from ${sender}` : "You have a new message" });
         }
         previousRequests = requestCount;
+        previousProjectRequests = projectRequestTotal;
         previousUnreadMessages = messageCount;
+        previousProjectUpdates = projectUpdates.length;
         hasBaseline = true;
         setIncomingRequests(requestCount);
+        setPendingProjectRequests(projectRequestTotal);
         setUnreadMessages(messageCount);
         setUnreadNotifications(notificationCount);
         if (toastTimer) window.clearTimeout(toastTimer);
@@ -84,6 +99,7 @@ export default function Navbar() {
       } catch {
         if (active) {
           setIncomingRequests(0);
+          setPendingProjectRequests(0);
           setUnreadMessages(0);
           setUnreadNotifications(0);
         }
@@ -120,7 +136,7 @@ export default function Navbar() {
     return `flex flex-col items-center gap-1 text-xs transition ${active ? "text-[#6f56d9]" : "text-[#6e6a7b] hover:text-[#17182d]"}`;
   };
 
-  const badgeCount = (path) => path === "/explore" ? incomingRequests : path === "/messages" ? unreadMessages : path === "/notifications" ? unreadNotifications : 0;
+  const badgeCount = (path) => path === "/explore" ? incomingRequests : path === "/projects" ? pendingProjectRequests : path === "/messages" ? unreadMessages : path === "/notifications" ? unreadNotifications : 0;
   const displayName = user?.name || user?.fullName || "OrbitU member";
   const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
   const showMobileAppNavigation = true;
@@ -189,6 +205,9 @@ export default function Navbar() {
           )}
         </div>
 
+        {showMobileAppNavigation && <Link to="/projects" aria-label={`Projects${pendingProjectRequests ? `, ${pendingProjectRequests} pending requests` : ""}`} className="relative flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#191a32] bg-white text-[#5947a8] shadow-[0_2px_0_#c9bcff] sm:hidden">
+          <FolderKanban size={20} />{pendingProjectRequests > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border border-white bg-[#ffe35b] px-1 text-[10px] font-bold text-[#17182d]">{pendingProjectRequests > 9 ? "9+" : pendingProjectRequests}</span>}
+        </Link>}
         {showMobileAppNavigation && <Link to="/messages" aria-label="Open messages" className="relative flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#191a32] bg-white text-[#5947a8] shadow-[0_2px_0_#c9bcff] sm:hidden">
           <MessageCircle size={20} />{unreadMessages > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border border-white bg-[#ffe35b] px-1 text-[10px] font-bold text-[#17182d]">{unreadMessages > 9 ? "9+" : unreadMessages}</span>}
         </Link>}
