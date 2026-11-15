@@ -3,13 +3,44 @@ const requestWindows = new Map();
 
 function promptFor(input) {
   if (input.type === "caption") {
+    const lengthGuidance = {
+      auto: "Adapt length to the real context: keep it brief when there are few details, use a little more detail when the draft or photo supports it, and never pad the caption.",
+      short: "Keep each caption to about 4–10 words.",
+      medium: "Keep each caption to about 10–24 words.",
+      long: "Write each caption in about 25–50 words, using only details supported by the draft or photo.",
+    }[input.captionLength || "auto"];
     return [
-      "Create three short, natural social post caption options for a student community.",
-      "Keep the author's meaning and voice. Do not invent facts, achievements, names, or links.",
-      "Make the options distinct: one casual, one polished, and one upbeat. Use at most one relevant emoji per option and no forced hashtags.",
-      "If there is little context, write neutral captions that do not claim specifics.",
-      ...(input.imageUrl ? ["A photo is attached. Describe only what is clearly visible, and make each caption specifically relevant to that photo."] : []),
+      "Create exactly three natural social-post captions for a student community. Write like a person sharing a post, not like image alt-text, a product listing, or a movie trailer.",
+      lengthGuidance,
+      "Give the three options genuinely different angles. Do not repeat the same scene description or details across all three. Keep only details that help the post feel relevant; avoid padding a long caption with visual inventory.",
+      "Do not invent events, achievements, feelings, people, plot, or links. Write in the language used in the author's draft; if there is no draft or the language is unclear, use English. Avoid forced hashtags and use at most one fitting emoji per option.",
+      ...(input.imageUrl ? ["A photo is attached. Use only details clearly visible in it. If asked to identify a series, film, character, or source, name it only when visually recognizable with high confidence; otherwise say it looks like a possibility or leave the source unnamed. Do not invent scene or plot facts."] : []),
+      ...(input.customPrompt ? [`Author's optional direction (primary creative brief): ${input.customPrompt}. Apply it directly to the captions while staying accurate to the draft/photo; when it asks to identify a source, be explicit about uncertainty rather than guessing.`] : []),
       `Context (JSON): ${JSON.stringify({ draft: input.draft, category: input.category, attachmentType: input.mediaType, photoAttached: Boolean(input.imageUrl) })}`,
+    ].join("\n");
+  }
+  if (input.type === "profileHeadline") {
+    return [
+      "Create exactly three distinct, professional but natural profile headline options for a student.",
+      "Keep each option under 160 characters. Make them clear and specific, not a list of buzzwords or generic claims.",
+      "Use only the profile facts provided. Do not claim job experience, expertise, achievements, or career goals unless explicitly stated. Do not invent proficiency levels.",
+      `Write in the language used in the current headline or custom direction; if unclear, use English. Optional author direction: ${input.customPrompt || "none"}`,
+      `Profile facts (JSON): ${JSON.stringify({ currentHeadline: input.currentText, name: input.name, course: input.course, year: input.year, university: input.university, skills: input.skills })}`,
+    ].join("\n");
+  }
+  if (input.type === "profileBio") {
+    const bioLengthGuidance = {
+      auto: "Choose a natural length based on how many profile facts are available; stay concise and do not pad.",
+      short: "Write a short bio of 1–2 sentences.",
+      detailed: "Write a more detailed bio of 3–4 concise sentences, but keep it under 500 characters.",
+    }[input.bioLength || "auto"];
+    return [
+      "Create exactly three distinct About-section bio options for a student profile.",
+      bioLengthGuidance,
+      "Make each bio sound human, warm, and specific to this person's supplied details. Avoid generic filler, third-person narration, and a resume-like list.",
+      "Use only the profile facts and current bio provided. Do not invent experiences, achievements, goals, or personality traits. Write in the language used in the current bio or custom direction; if unclear, use English.",
+      `Optional author direction: ${input.customPrompt || "none"}`,
+      `Profile facts (JSON): ${JSON.stringify({ currentBio: input.currentText, name: input.name, course: input.course, year: input.year, university: input.university, location: input.location, skills: input.skills })}`,
     ].join("\n");
   }
   return [
@@ -124,8 +155,8 @@ export async function generateSuggestions(req, res) {
             properties: { suggestions: { type: "ARRAY", items: { type: "STRING" } } },
             required: ["suggestions"],
           },
-          maxOutputTokens: 300,
-          temperature: req.validated.type === "commentReply" ? 0.3 : 0.7,
+          maxOutputTokens: req.validated.type === "caption" && req.validated.captionLength === "long" || req.validated.type === "profileBio" && req.validated.bioLength === "detailed" ? 500 : 300,
+          temperature: req.validated.type === "commentReply" ? 0.3 : 0.5,
         },
       }),
     });

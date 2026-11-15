@@ -52,6 +52,8 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
   const [posts, setPosts] = useState(() => cachedPosts || []);
   const [postText, setPostText] = useState("");
   const [category, setCategory] = useState("General");
+  const [captionLength, setCaptionLength] = useState("auto");
+  const [captionPrompt, setCaptionPrompt] = useState("");
   const [captionSuggestions, setCaptionSuggestions] = useState([]);
   const [generatingCaption, setGeneratingCaption] = useState(false);
   const [captionError, setCaptionError] = useState("");
@@ -176,6 +178,8 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
         type: "caption",
         draft: postText.trim(),
         category,
+        captionLength,
+        customPrompt: captionPrompt.trim(),
         mediaType: image ? "image" : media?.type || "none",
         imageUrl: image || "",
       });
@@ -272,6 +276,8 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
       setPostingPost(false);
     }
     setPostText("");
+    setCaptionPrompt("");
+    setCaptionLength("auto");
     setCaptionSuggestions([]);
     setCaptionError("");
     if (postTextareaRef.current) {
@@ -495,6 +501,19 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
             {generatingCaption ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
             {generatingCaption ? "Writing captions…" : "Generate caption"}
           </button>
+        </div>
+        <div className="mt-3 grid gap-3 rounded-xl border border-[#e7dfef] bg-[#faf8ff] p-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#514e62]">Caption length</p>
+            <div className="flex flex-wrap gap-1 rounded-lg bg-white p-1">
+              {[["auto", "Auto"], ["short", "Short"], ["medium", "Medium"], ["long", "Long"]].map(([value, label]) => <button key={value} type="button" aria-pressed={captionLength === value} onClick={() => { setCaptionLength(value); setCaptionSuggestions([]); setCaptionError(""); }} className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${captionLength === value ? "bg-[#eee9ff] text-[#5947a8]" : "text-[#6e6a7b] hover:bg-[#f7f4ff]"}`}>{label}</button>)}
+            </div>
+            <p className="mt-1 text-[10px] text-[#858191]">Auto adapts to your details.</p>
+          </div>
+          <label className="block text-xs font-semibold text-[#514e62]">Extra prompt <span className="font-normal text-[#858191]">(optional)</span>
+            <textarea value={captionPrompt} onChange={(event) => { setCaptionPrompt(event.target.value); setCaptionSuggestions([]); setCaptionError(""); }} maxLength={500} rows={2} placeholder="e.g. Keep it upbeat and focus on what I learned" className="mt-1.5 w-full resize-y rounded-lg border border-[#e7dfef] bg-white px-3 py-2 text-xs font-normal leading-5 text-[#17182d] outline-none placeholder:text-[#9994a5] focus:border-[#7660dc]" />
+            <span className="mt-1 block text-[10px] font-normal text-[#858191]">Set the tone, audience, or what to highlight.</span>
+          </label>
         </div>
         {captionError && <p role="alert" className="mt-2 text-xs text-[#a33b48]">{captionError}</p>}
         {captionSuggestions.length > 0 && <div className="mt-2 space-y-2 rounded-xl border border-[#e7dfd0] bg-[#fffdf9] p-3">

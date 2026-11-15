@@ -16,6 +16,8 @@ import {
   Video,
   Users,
   FileText,
+  Sparkles,
+  LoaderCircle,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import ProfileSections from "../components/ProfileSections";
@@ -132,6 +134,15 @@ function Profile() {
   const [photoProgress, setPhotoProgress] = useState(0);
   const [imageCrop, setImageCrop] = useState(null);
   const [photoPreview, setPhotoPreview] = useState("");
+  const [headlinePrompt, setHeadlinePrompt] = useState("");
+  const [bioPrompt, setBioPrompt] = useState("");
+  const [bioLength, setBioLength] = useState("auto");
+  const [headlineSuggestions, setHeadlineSuggestions] = useState([]);
+  const [bioSuggestions, setBioSuggestions] = useState([]);
+  const [generatingHeadline, setGeneratingHeadline] = useState(false);
+  const [generatingBio, setGeneratingBio] = useState(false);
+  const [headlineAiError, setHeadlineAiError] = useState("");
+  const [bioAiError, setBioAiError] = useState("");
 
   useEffect(() => {
     if (!photoPreview) return undefined;
@@ -154,6 +165,42 @@ function Profile() {
       ...current,
       [event.target.name]: event.target.value,
     }));
+  }
+
+  async function generateProfileSuggestions(field) {
+    const isHeadline = field === "headline";
+    const setGenerating = isHeadline ? setGeneratingHeadline : setGeneratingBio;
+    const setSuggestions = isHeadline ? setHeadlineSuggestions : setBioSuggestions;
+    const setAiError = isHeadline ? setHeadlineAiError : setBioAiError;
+    if (isHeadline ? generatingHeadline : generatingBio) return;
+    setGenerating(true);
+    setAiError("");
+    setSuggestions([]);
+    try {
+      const result = await api.aiSuggestions({
+        type: isHeadline ? "profileHeadline" : "profileBio",
+        currentText: isHeadline ? draft.headline || "" : draft.bio || "",
+        customPrompt: isHeadline ? headlinePrompt.trim() : bioPrompt.trim(),
+        ...(isHeadline ? {} : { bioLength }),
+        name: draft.name || "",
+        course: draft.course || "",
+        year: draft.year || "",
+        university: draft.university || "",
+        ...(isHeadline ? {} : { location: draft.location || "" }),
+        skills: draft.skills || [],
+      });
+      setSuggestions(result.suggestions || []);
+    } catch (requestError) {
+      setAiError(requestError.message);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function applyProfileSuggestion(field, suggestion) {
+    setDraft((current) => ({ ...current, [field]: suggestion }));
+    if (field === "headline") setHeadlineSuggestions([]);
+    else setBioSuggestions([]);
   }
 
   async function saveProfile(event) {
@@ -239,6 +286,12 @@ function Profile() {
     setDraft(profile);
     setEditing(false);
     setNewSkill("");
+    setHeadlinePrompt("");
+    setBioPrompt("");
+    setHeadlineSuggestions([]);
+    setBioSuggestions([]);
+    setHeadlineAiError("");
+    setBioAiError("");
   }
 
   function addSkill(event) {
@@ -336,6 +389,12 @@ function Profile() {
                 <button
                   onClick={() => {
                     setDraft(profile);
+                    setHeadlinePrompt("");
+                    setBioPrompt("");
+                    setHeadlineSuggestions([]);
+                    setBioSuggestions([]);
+                    setHeadlineAiError("");
+                    setBioAiError("");
                     setEditing(true);
                   }}
                   className="flex items-center gap-2 rounded-xl border-2 border-[#191a32] bg-white px-4 py-2.5 text-sm font-semibold shadow-[0_3px_0_#c9bcff] transition hover:-translate-y-0.5"
@@ -382,17 +441,26 @@ function Profile() {
                 </div>
 
                 <div>
-                  <label className={labelClass} htmlFor="headline">
-                    Headline
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className={`${labelClass} mb-0`} htmlFor="headline">Headline</label>
+                    <button type="button" onClick={() => generateProfileSuggestions("headline")} disabled={generatingHeadline} className="inline-flex items-center gap-1.5 rounded-lg border border-[#d9d0ff] bg-[#f3efff] px-3 py-1.5 text-xs font-semibold text-[#5947a8] disabled:opacity-50">
+                      {generatingHeadline ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      {generatingHeadline ? "Writing headlines…" : "Generate headline"}
+                    </button>
+                  </div>
                   <input
                     id="headline"
                     name="headline"
                     value={draft.headline}
-                    onChange={updateField}
+                    onChange={(event) => { updateField(event); setHeadlineSuggestions([]); setHeadlineAiError(""); }}
                     placeholder="e.g. B.Tech student | Frontend developer"
+                    maxLength={160}
                     className={inputClass}
                   />
+                   <input value={headlinePrompt} onChange={(event) => { setHeadlinePrompt(event.target.value); setHeadlineSuggestions([]); setHeadlineAiError(""); }} maxLength={500} placeholder="Optional direction, e.g. focus on frontend and project work" className={`${inputClass} mt-2 text-xs`} />
+                  <p className="mt-1 text-[11px] text-[#858191]">Add a prompt if you want a specific tone or focus. Choose a suggestion to use it.</p>
+                  {headlineAiError && <p role="alert" className="mt-2 text-xs text-[#a33b48]">{headlineAiError}</p>}
+                  {headlineSuggestions.length > 0 && <div className="mt-2 space-y-2 rounded-xl border border-[#e7dfef] bg-[#faf8ff] p-3"><p className="text-xs font-semibold text-[#514e62]">Choose a headline</p>{headlineSuggestions.map((suggestion, index) => <button key={`${index}-${suggestion}`} type="button" onClick={() => applyProfileSuggestion("headline", suggestion)} className="block w-full rounded-lg border border-[#eee8dc] bg-white px-3 py-2 text-left text-sm text-[#514e62] hover:border-[#b9a9ff] hover:bg-[#f8f5ff]">{suggestion}</button>)}</div>}
                 </div>
 
                 <div>
@@ -476,22 +544,33 @@ function Profile() {
                 </div>
 
                 <div>
-                  <label className={labelClass} htmlFor="bio">
-                    About you
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className={`${labelClass} mb-0`} htmlFor="bio">About you</label>
+                    <button type="button" onClick={() => generateProfileSuggestions("bio")} disabled={generatingBio} className="inline-flex items-center gap-1.5 rounded-lg border border-[#d9d0ff] bg-[#f3efff] px-3 py-1.5 text-xs font-semibold text-[#5947a8] disabled:opacity-50">
+                      {generatingBio ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      {generatingBio ? "Writing About…" : "Generate About"}
+                    </button>
+                  </div>
                   <textarea
                     id="bio"
                     name="bio"
                     value={draft.bio}
-                    onChange={updateField}
+                    onChange={(event) => { updateField(event); setBioSuggestions([]); setBioAiError(""); }}
                     rows={4}
                     maxLength={500}
                     placeholder="Tell other students about your interests and goals..."
                     className={inputClass + " resize-y"}
                   />
-                  <p className="mt-1 text-right text-xs text-[#858191]">
-                    {draft.bio.length}/500
-                  </p>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-1 rounded-lg bg-[#faf8ff] p-1">
+                      {[["auto", "Auto"], ["short", "Short"], ["detailed", "Detailed"]].map(([value, label]) => <button key={value} type="button" aria-pressed={bioLength === value} onClick={() => { setBioLength(value); setBioSuggestions([]); setBioAiError(""); }} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${bioLength === value ? "bg-[#eee9ff] text-[#5947a8]" : "text-[#6e6a7b] hover:bg-white"}`}>{label}</button>)}
+                    </div>
+                    <p className="text-xs text-[#858191]">{draft.bio.length}/500</p>
+                  </div>
+                  <input value={bioPrompt} onChange={(event) => { setBioPrompt(event.target.value); setBioSuggestions([]); setBioAiError(""); }} maxLength={500} placeholder="Optional direction, e.g. mention what I enjoy building" className={`${inputClass} mt-2 text-xs`} />
+                  <p className="mt-1 text-[11px] text-[#858191]">Add a prompt for the tone or details to focus on.</p>
+                  {bioAiError && <p role="alert" className="mt-2 text-xs text-[#a33b48]">{bioAiError}</p>}
+                  {bioSuggestions.length > 0 && <div className="mt-2 space-y-2 rounded-xl border border-[#e7dfef] bg-[#faf8ff] p-3"><p className="text-xs font-semibold text-[#514e62]">Choose an About bio</p>{bioSuggestions.map((suggestion, index) => <button key={`${index}-${suggestion}`} type="button" onClick={() => applyProfileSuggestion("bio", suggestion)} className="block w-full rounded-lg border border-[#eee8dc] bg-white px-3 py-2 text-left text-sm text-[#514e62] hover:border-[#b9a9ff] hover:bg-[#f8f5ff]">{suggestion}</button>)}</div>}
                 </div>
 
                 <div>
