@@ -10,6 +10,9 @@ const USER_FIELDS = "name headline course year university photo skills";
 
 function formatProject(project, viewerId) {
   const owner = project.owner || {};
+  const ownerId = String(owner._id || owner);
+  const roleEntries = project.memberRoles || [];
+  const roleFor = (memberId) => memberId === ownerId ? "owner" : roleEntries.find((entry) => String(entry.user?._id || entry.user) === memberId)?.role || "member";
   const requests = (project.requests || []).map((request) => ({
     id: String(request._id),
     message: request.message,
@@ -24,14 +27,24 @@ function formatProject(project, viewerId) {
   return {
     id: String(project._id), title: project.title, description: project.description,
     skills: project.skills || [], roles: project.roles || [], teamSize: project.teamSize,
-    members: (project.members || []).map((member) => ({ id: String(member._id || member), name: member.name || "Student", photo: member.photo || "" })),
+    members: (project.members || []).map((member) => { const id = String(member._id || member); return { id, name: member.name || "Student", photo: member.photo || "", role: roleFor(id) }; }),
     memberCount: (project.members || []).length, status: project.status,
     owner: { id: String(owner._id || owner), name: owner.name || "Student", headline: owner.headline || "Student", university: owner.university || "", photo: owner.photo || "", skills: owner.skills || [] },
-    isOwner: String(owner._id || owner) === String(viewerId),
+    isOwner: ownerId === String(viewerId),
+    myRole: roleFor(String(viewerId)),
     myRequestStatus: viewerRequest?.status || "",
     requests: String(owner._id || owner) === String(viewerId) ? requests : [],
     createdAt: project.createdAt, updatedAt: project.updatedAt,
   };
+}
+
+function requireProjectRole(project, userId, roles) {
+  const ownerId = String(project.owner?._id || project.owner);
+  if (ownerId === String(userId)) return "owner";
+  const membership = (project.memberRoles || []).find((entry) => String(entry.user?._id || entry.user) === String(userId));
+  const role = membership?.role || "member";
+  if (!roles.includes(role)) throw httpError(403, "Your project role does not allow this action.");
+  return role;
 }
 
 export async function listCollaborationProjects({ userId, query = "" }) {
@@ -62,6 +75,7 @@ async function findWorkspaceForMember({ projectId, userId }) {
     .populate("requests.user", USER_FIELDS)
     .populate("tasks.assignee", "name photo headline")
     .populate("tasks.createdBy", "name photo")
+    .populate("tasks.comments.author", "name photo")
     .populate("milestones.createdBy", "name photo")
     .populate("activity.actor", "name photo")
     .populate("resources.addedBy", "name photo")
@@ -79,6 +93,11 @@ function formatWorkspace(project, userId) {
     assignee: task.assignee?._id ? { id: String(task.assignee._id), name: task.assignee.name, photo: task.assignee.photo || "", headline: task.assignee.headline || "" } : null,
     milestoneId: task.milestone ? String(task.milestone) : "", dueDate: task.dueDate || null,
     createdBy: task.createdBy?._id ? { id: String(task.createdBy._id), name: task.createdBy.name, photo: task.createdBy.photo || "" } : null,
+    comments: (task.comments || []).map((comment) => ({
+      id: String(comment._id), text: comment.text,
+      author: comment.author?._id ? { id: String(comment.author._id), name: comment.author.name || "Teammate", photo: comment.author.photo || "" } : null,
+      createdAt: comment.createdAt, updatedAt: comment.updatedAt,
+    })),
     createdAt: task.createdAt, updatedAt: task.updatedAt,
   }));
   const milestones = project.milestones.map((milestone) => ({
@@ -113,7 +132,7 @@ function recordProjectActivity(project, { actorId, action, kind, title, summary 
 
 async function notifyProjectTeammates(project, actorId, { kind, action, title, summary = "" }) {
   const recipients = new Set([String(project.owner?._id || project.owner), ...project.members.map((member) => String(member._id || member))]);
-  const actionText = action === "created" ? "added" : action === "deleted" ? "removed" : action === "status_changed" ? "changed the status of" : action === "assigned" ? "updated the assignee for" : "updated";
+  const actionText = action === "created" ? "added" : action === "deleted" ? "removed" : action === "status_changed" ? "changed the status of" : action === "assigned" ? "updated the assignee for" : action === "commented" ? "commented on" : "updated";
   const message = `${actionText} ${kind} “${title}” in ${project.title}${summary ? ` · ${summary}` : ""}.`.slice(0, 300);
   await Promise.allSettled([...recipients].filter((recipient) => recipient !== String(actorId)).map((recipient) => createNotification({
     recipient, actor: actorId, type: NOTIFICATION_TYPES.PROJECT, message, project: project._id,
@@ -128,6 +147,7 @@ async function ensureConnected({ userId, otherUserId }) {
 export async function inviteProjectTeammate({ projectId, inviterId, inviteeId }) {
   if (String(inviterId) === String(inviteeId)) throw httpError(400, "You cannot invite yourself.");
   const project = await findWorkspaceForMember({ projectId, userId: inviterId });
+  requireProjectRole(project, inviterId, ["admin"]);
   if (["completed", "closed"].includes(project.status)) throw httpError(409, "Reopen this project before inviting teammates.");
   if (project.members.length >= project.teamSize) throw httpError(409, "Your team is full. Increase team size before inviting someone.");
   if (project.members.some((member) => String(member._id || member) === String(inviteeId))) throw httpError(409, "This student is already on your team.");
@@ -169,6 +189,7 @@ export async function decideProjectInvitation({ projectId, invitationId, userId,
     if (project.members.length >= project.teamSize) throw httpError(409, "This team is now full.");
     invitation.status = "accepted";
     if (!project.members.some((member) => String(member) === String(userId))) project.members.push(userId);
+    if (!(project.memberRoles || []).some((entry) => String(entry.user?._id || entry.user) === String(userId))) project.memberRoles.push({ user: userId, role: "member" });
     if (project.status === "open" && project.members.length >= project.teamSize) project.status = "full";
   } else invitation.status = "declined";
   recordProjectActivity(project, { actorId: userId, action: action === "accept" ? "joined" : "declined_invite", kind: "teammate", title: action === "accept" ? "the project team" : "the project invitation" });
@@ -181,6 +202,7 @@ export async function decideProjectInvitation({ projectId, invitationId, userId,
 
 export async function addProjectResource({ projectId, userId, data }) {
   const project = await findWorkspaceForMember({ projectId, userId });
+  requireProjectRole(project, userId, ["admin", "member"]);
   if (project.resources.length >= 100) throw httpError(400, "This project already has 100 shared resources.");
   if (data.type === "file" && data.size > 50 * 1024 * 1024) throw httpError(400, "Files must be 50 MB or smaller.");
   project.resources.push({ ...data, addedBy: userId });
@@ -192,6 +214,7 @@ export async function addProjectResource({ projectId, userId, data }) {
 
 export async function deleteProjectResource({ projectId, resourceId, userId }) {
   const project = await findWorkspaceForMember({ projectId, userId });
+  requireProjectRole(project, userId, ["admin", "member"]);
   const resource = project.resources.id(resourceId);
   if (!resource) throw httpError(404, "Shared resource not found.");
   const title = resource.title;
@@ -210,6 +233,7 @@ export async function removeProjectTeammate({ projectId, memberId, ownerId }) {
   if (!member) throw httpError(404, "Project teammate not found.");
   const memberName = member.name || "A teammate";
   project.members.pull(memberId);
+  project.memberRoles = (project.memberRoles || []).filter((entry) => String(entry.user?._id || entry.user) !== String(memberId));
   project.tasks.forEach((task) => {
     if (String(task.assignee?._id || task.assignee || "") === String(memberId)) task.assignee = null;
   });
@@ -236,6 +260,7 @@ export async function getCollaborationWorkspace({ projectId, userId }) {
 
 export async function createProjectMilestone({ projectId, userId, data }) {
   const project = await findWorkspaceForMember({ projectId, userId });
+  requireProjectRole(project, userId, ["admin", "member"]);
   project.milestones.push({ title: data.title, dueDate: data.dueDate ? new Date(`${data.dueDate}T00:00:00.000Z`) : null, createdBy: userId });
   recordProjectActivity(project, { actorId: userId, action: "created", kind: "milestone", title: data.title });
   await project.save();
@@ -245,6 +270,7 @@ export async function createProjectMilestone({ projectId, userId, data }) {
 
 export async function updateProjectMilestone({ projectId, milestoneId, userId, data }) {
   const project = await findWorkspaceForMember({ projectId, userId });
+  requireProjectRole(project, userId, ["admin", "member"]);
   const milestone = project.milestones.id(milestoneId);
   if (!milestone) throw httpError(404, "Milestone not found.");
   const changes = [];
@@ -268,6 +294,7 @@ export async function updateProjectMilestone({ projectId, milestoneId, userId, d
 
 export async function deleteProjectMilestone({ projectId, milestoneId, userId }) {
   const project = await findWorkspaceForMember({ projectId, userId });
+  requireProjectRole(project, userId, ["admin", "member"]);
   const milestone = project.milestones.id(milestoneId);
   if (!milestone) throw httpError(404, "Milestone not found.");
   const title = milestone.title;
@@ -283,6 +310,7 @@ export async function deleteProjectMilestone({ projectId, milestoneId, userId })
 
 export async function createProjectTask({ projectId, userId, data }) {
   const project = await findWorkspaceForMember({ projectId, userId });
+  requireProjectRole(project, userId, ["admin", "member"]);
   const memberIds = new Set([String(project.owner?._id || project.owner), ...project.members.map((member) => String(member._id || member))]);
   if (data.assigneeId && !memberIds.has(data.assigneeId)) throw httpError(400, "Assign tasks to a member of this project.");
   if (data.milestoneId && !project.milestones.id(data.milestoneId)) throw httpError(400, "Choose a milestone from this project.");
@@ -299,6 +327,7 @@ export async function createProjectTask({ projectId, userId, data }) {
 
 export async function updateProjectTask({ projectId, taskId, userId, data }) {
   const project = await findWorkspaceForMember({ projectId, userId });
+  requireProjectRole(project, userId, ["admin", "member"]);
   const task = project.tasks.id(taskId);
   if (!task) throw httpError(404, "Task not found.");
   const changes = [];
@@ -338,6 +367,7 @@ export async function updateProjectTask({ projectId, taskId, userId, data }) {
 
 export async function deleteProjectTask({ projectId, taskId, userId }) {
   const project = await findWorkspaceForMember({ projectId, userId });
+  requireProjectRole(project, userId, ["admin", "member"]);
   const task = project.tasks.id(taskId);
   if (!task) throw httpError(404, "Task not found.");
   const title = task.title;
@@ -345,6 +375,36 @@ export async function deleteProjectTask({ projectId, taskId, userId }) {
   recordProjectActivity(project, { actorId: userId, action: "deleted", kind: "task", title });
   await project.save();
   await notifyProjectTeammates(project, userId, { action: "deleted", kind: "task", title });
+  return getCollaborationWorkspace({ projectId, userId });
+}
+
+export async function addProjectTaskComment({ projectId, taskId, userId, text }) {
+  const project = await findWorkspaceForMember({ projectId, userId });
+  requireProjectRole(project, userId, ["admin", "member"]);
+  const task = project.tasks.id(taskId);
+  if (!task) throw httpError(404, "Task not found.");
+  if ((task.comments || []).length >= 100) throw httpError(409, "This task has reached its comment limit.");
+  task.comments.push({ author: userId, text });
+  recordProjectActivity(project, { actorId: userId, action: "commented", kind: "task", title: task.title, summary: text.slice(0, 120) });
+  await project.save();
+  await notifyProjectTeammates(project, userId, { action: "commented", kind: "task", title: task.title, summary: text.slice(0, 120) });
+  return getCollaborationWorkspace({ projectId, userId });
+}
+
+export async function deleteProjectTaskComment({ projectId, taskId, commentId, userId }) {
+  const project = await findWorkspaceForMember({ projectId, userId });
+  const role = requireProjectRole(project, userId, ["admin", "member"]);
+  const task = project.tasks.id(taskId);
+  if (!task) throw httpError(404, "Task not found.");
+  const comment = task.comments.id(commentId);
+  if (!comment) throw httpError(404, "Comment not found.");
+  const isAuthor = String(comment.author?._id || comment.author) === String(userId);
+  if (!isAuthor && !["owner", "admin"].includes(role)) throw httpError(403, "You can remove only your own comment.");
+  const taskTitle = task.title;
+  task.comments.pull(commentId);
+  recordProjectActivity(project, { actorId: userId, action: "updated", kind: "task", title: taskTitle, summary: "removed a task comment" });
+  await project.save();
+  await notifyProjectTeammates(project, userId, { action: "updated", kind: "task", title: taskTitle, summary: "removed a task comment" });
   return getCollaborationWorkspace({ projectId, userId });
 }
 
@@ -365,6 +425,24 @@ export async function createCollaborationProject({ ownerId, data }) {
   const project = await CollaborationProject.create({ ...data, owner: ownerId, members: [ownerId] });
   await project.populate([{ path: "owner", select: USER_FIELDS }, { path: "members", select: "name photo" }]);
   return formatProject(project, ownerId);
+}
+
+export async function updateProjectMemberRole({ projectId, memberId, ownerId, role }) {
+  const project = await findWorkspaceForMember({ projectId, userId: ownerId });
+  if (String(project.owner?._id || project.owner) !== String(ownerId)) throw httpError(403, "Only the project owner can change teammate roles.");
+  if (String(memberId) === String(ownerId)) throw httpError(400, "The project owner always keeps the owner role.");
+  const member = project.members.find((person) => String(person._id || person) === String(memberId));
+  if (!member) throw httpError(404, "Project teammate not found.");
+  const existing = (project.memberRoles || []).find((entry) => String(entry.user?._id || entry.user) === String(memberId));
+  if (existing?.role === role) return getCollaborationWorkspace({ projectId, userId: ownerId });
+  const previousRole = existing?.role || "member";
+  if (existing) existing.role = role;
+  else project.memberRoles.push({ user: memberId, role });
+  recordProjectActivity(project, { actorId: ownerId, action: "role_changed", kind: "teammate", title: member.name || "A teammate", summary: `${previousRole} → ${role}` });
+  await project.save();
+  await createNotification({ recipient: memberId, actor: ownerId, type: NOTIFICATION_TYPES.PROJECT, message: `Your role in ${project.title} changed to ${role}.`, project: project._id });
+  await notifyProjectTeammates(project, ownerId, { action: "updated", kind: "teammate", title: member.name || "A teammate", summary: `role changed to ${role}` });
+  return getCollaborationWorkspace({ projectId, userId: ownerId });
 }
 
 export async function updateCollaborationProject({ projectId, ownerId, data }) {
@@ -411,6 +489,7 @@ export async function decideProjectRequest({ projectId, requestId, ownerId, acti
     if (project.members.length >= project.teamSize) throw httpError(409, "Your team is full. Increase team size before accepting another member.");
     request.status = "accepted";
     if (!project.members.some((member) => String(member) === String(request.user))) project.members.push(request.user);
+    if (!(project.memberRoles || []).some((entry) => String(entry.user?._id || entry.user) === String(request.user))) project.memberRoles.push({ user: request.user, role: "member" });
     if (project.members.length >= project.teamSize) project.status = "full";
   } else request.status = "rejected";
   await project.save();

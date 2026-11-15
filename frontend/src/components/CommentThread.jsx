@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { MessageCircle, Pencil, Send, Trash2, X } from "lucide-react";
+import { LoaderCircle, MessageCircle, Pencil, Send, Sparkles, Trash2, X } from "lucide-react";
 import { api } from "../utils/api";
 import InlineEmojiPicker from "./InlineEmojiPicker";
 
@@ -18,12 +18,14 @@ function descendantsOf(comments, parentId) {
   return ids;
 }
 
-function CommentItem({ comment, currentUserId, postId, onChange, onError, allComments, children = [], depth = 0 }) {
+function CommentItem({ comment, currentUserId, postId, postText, onChange, onError, allComments, children = [], depth = 0 }) {
   const [replying, setReplying] = useState(false);
   const [replyDraft, setReplyDraft] = useState("");
   const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(comment.text);
   const [busy, setBusy] = useState(false);
+  const [generatingReply, setGeneratingReply] = useState(false);
+  const [replySuggestions, setReplySuggestions] = useState([]);
   const isAuthor = comment.authorId === currentUserId;
   const canReply = depth < 6;
 
@@ -40,6 +42,23 @@ function CommentItem({ comment, currentUserId, postId, onChange, onError, allCom
       window.dispatchEvent(new Event("connectly:backend-update"));
     } catch (error) { onError(error.message); }
     finally { setBusy(false); }
+  }
+
+  async function generateReplySuggestions() {
+    if (generatingReply) return;
+    setGeneratingReply(true);
+    setReplySuggestions([]);
+    try {
+      const parentComment = comment.parentId ? allComments.find((item) => item.id === comment.parentId) : null;
+      const result = await api.aiSuggestions({
+        type: "commentReply",
+        postText,
+        commentText: comment.text,
+        parentCommentText: parentComment?.text || "",
+      });
+      setReplySuggestions(result.suggestions || []);
+    } catch (error) { onError(error.message); }
+    finally { setGeneratingReply(false); }
   }
 
   async function saveEdit(event) {
@@ -89,19 +108,29 @@ function CommentItem({ comment, currentUserId, postId, onChange, onError, allCom
           {canReply && <button type="button" onClick={() => { setReplying((value) => !value); setEditing(false); }} className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6f56d9] hover:text-[#4b36ad]"><MessageCircle size={12} /> Reply</button>}
           {comment.createdAt && <time className="text-[10px] text-[#858191]">{new Date(comment.createdAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</time>}
         </div>}
-        {replying && <form onSubmit={submitReply} className="mt-2 flex gap-2">
-          <InlineEmojiPicker onSelect={(emoji) => setReplyDraft((current) => `${current}${emoji}`)} />
-          <input autoFocus value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} maxLength={500} placeholder={`Reply to ${comment.name}…`} className="w-full min-w-0 flex-1 rounded-lg border border-[#e7dfd0] bg-white px-2.5 py-2 text-xs outline-none focus:border-[#7660dc]" />
-          <button type="submit" disabled={!replyDraft.trim() || busy} aria-label="Send reply" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#191a32] bg-[#ffe35b] text-black disabled:opacity-50">{busy ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-black/25 border-t-black" /> : <Send size={14} />}</button>
-          <button type="button" onClick={() => setReplying(false)} aria-label="Cancel reply" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e7dfd0] text-[#6e6a7b]"><X size={14} /></button>
-        </form>}
+        {replying && <>
+          <form onSubmit={submitReply} className="mt-2 flex gap-2">
+            <InlineEmojiPicker onSelect={(emoji) => setReplyDraft((current) => `${current}${emoji}`)} />
+            <input autoFocus value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} maxLength={500} placeholder={`Reply to ${comment.name}…`} className="w-full min-w-0 flex-1 rounded-lg border border-[#e7dfd0] bg-white px-2.5 py-2 text-xs outline-none focus:border-[#7660dc]" />
+            <button type="button" onClick={generateReplySuggestions} disabled={generatingReply || busy} className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-[#d9d0ff] bg-[#f3efff] px-2 text-xs font-semibold text-[#5947a8] disabled:opacity-50" title="Generate reply suggestions">
+              {generatingReply ? <LoaderCircle size={13} className="animate-spin" /> : <Sparkles size={13} />}
+              <span className="hidden sm:inline">AI reply</span>
+            </button>
+            <button type="submit" disabled={!replyDraft.trim() || busy} aria-label="Send reply" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#191a32] bg-[#ffe35b] text-black disabled:opacity-50">{busy ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-black/25 border-t-black" /> : <Send size={14} />}</button>
+            <button type="button" onClick={() => { setReplying(false); setReplySuggestions([]); }} aria-label="Cancel reply" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e7dfd0] text-[#6e6a7b]"><X size={14} /></button>
+          </form>
+          {replySuggestions.length > 0 && <div className="ml-10 mt-2 space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858191]">Pick a reply</p>
+            {replySuggestions.map((suggestion, index) => <button key={`${index}-${suggestion}`} type="button" onClick={() => { setReplyDraft(suggestion); setReplySuggestions([]); }} className="block w-full rounded-lg border border-[#e7dfd0] bg-white px-2.5 py-2 text-left text-xs text-[#514e62] transition hover:border-[#b9a9ff] hover:bg-[#f8f5ff]">{suggestion}</button>)}
+          </div>}
+        </>}
       </div>
     </div>
-    {children.length > 0 && <div className="mt-2 space-y-2">{children.map((reply) => <CommentItem key={reply.id} comment={reply} currentUserId={currentUserId} postId={postId} onChange={onChange} onError={onError} allComments={allComments} depth={depth + 1} children={allComments.filter((item) => item.parentId === reply.id)} />)}</div>}
+    {children.length > 0 && <div className="mt-2 space-y-2">{children.map((reply) => <CommentItem key={reply.id} comment={reply} currentUserId={currentUserId} postId={postId} postText={postText} onChange={onChange} onError={onError} allComments={allComments} depth={depth + 1} children={allComments.filter((item) => item.parentId === reply.id)} />)}</div>}
   </div>;
 }
 
-export default function CommentThread({ postId, comments = [], currentUserId, onChange, onError }) {
+export default function CommentThread({ postId, postText = "", comments = [], currentUserId, onChange, onError }) {
   const { roots, childrenByParent } = useMemo(() => {
     const children = new Map();
     for (const comment of comments) {
@@ -114,7 +143,7 @@ export default function CommentThread({ postId, comments = [], currentUserId, on
   }, [comments]);
 
   return <div className="space-y-3">
-    {roots.map((comment) => <CommentItem key={comment.id} comment={comment} currentUserId={currentUserId} postId={postId} onChange={onChange} onError={onError} allComments={comments} children={childrenByParent.get(comment.id) || []} />)}
+    {roots.map((comment) => <CommentItem key={comment.id} comment={comment} currentUserId={currentUserId} postId={postId} postText={postText} onChange={onChange} onError={onError} allComments={comments} children={childrenByParent.get(comment.id) || []} />)}
     {comments.length === 0 && <p className="text-xs text-[#858191]">No comments yet. Start the conversation!</p>}
   </div>;
 }

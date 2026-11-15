@@ -13,6 +13,11 @@ const milestoneSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 }, { timestamps: true });
 
+const taskCommentSchema = new mongoose.Schema({
+  author: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  text: { type: String, required: true, trim: true, maxlength: 1000 },
+}, { timestamps: true });
+
 const taskSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true, maxlength: 120 },
   description: { type: String, trim: true, maxlength: 600, default: "" },
@@ -21,11 +26,12 @@ const taskSchema = new mongoose.Schema({
   milestone: { type: mongoose.Schema.Types.ObjectId, default: null },
   dueDate: { type: Date, default: null },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  comments: { type: [taskCommentSchema], default: [], validate: [(items) => items.length <= 100, "A task can have at most 100 comments."] },
 }, { timestamps: true });
 
 const activitySchema = new mongoose.Schema({
   actor: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  action: { type: String, enum: ["created", "updated", "status_changed", "assigned", "deleted", "invited", "joined", "declined_invite", "resource_added", "resource_removed"], required: true },
+  action: { type: String, enum: ["created", "updated", "status_changed", "assigned", "commented", "deleted", "invited", "joined", "declined_invite", "resource_added", "resource_removed", "role_changed"], required: true },
   kind: { type: String, enum: ["task", "milestone", "resource", "teammate"], required: true },
   title: { type: String, required: true, trim: true, maxlength: 120 },
   summary: { type: String, trim: true, maxlength: 300, default: "" },
@@ -47,6 +53,11 @@ const resourceSchema = new mongoose.Schema({
   addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 }, { timestamps: true });
 
+const memberRoleSchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  role: { type: String, enum: ["admin", "member", "viewer"], default: "member" },
+}, { _id: false });
+
 const collaborationProjectSchema = new mongoose.Schema({
   owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
   title: { type: String, required: true, trim: true, maxlength: 100 },
@@ -55,6 +66,7 @@ const collaborationProjectSchema = new mongoose.Schema({
   roles: { type: [{ type: String, trim: true, maxlength: 60 }], default: [], validate: [(items) => items.length <= 8, "Choose at most 8 roles."] },
   teamSize: { type: Number, min: 2, max: 12, default: 4 },
   members: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], default: [] },
+  memberRoles: { type: [memberRoleSchema], default: [] },
   requests: { type: [requestSchema], default: [] },
   invitations: { type: [invitationSchema], default: [] },
   resources: { type: [resourceSchema], default: [], validate: [(items) => items.length <= 100, "A project can have at most 100 shared resources."] },

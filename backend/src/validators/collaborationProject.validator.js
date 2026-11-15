@@ -24,6 +24,7 @@ const joinRequestSchema = z.object({ message: z.string().trim().max(500).optiona
 const requestDecisionSchema = z.object({ action: z.enum(["accept", "reject"]) }).strict();
 const milestoneIdParamsSchema = z.object({ id: z.string().regex(/^[a-f\d]{24}$/i, "Invalid project id."), milestoneId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid milestone id.") }).strict();
 const taskIdParamsSchema = z.object({ id: z.string().regex(/^[a-f\d]{24}$/i, "Invalid project id."), taskId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid task id.") }).strict();
+const taskCommentParamsSchema = z.object({ id: z.string().regex(/^[a-f\d]{24}$/i, "Invalid project id."), taskId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid task id."), commentId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid comment id.") }).strict();
 const workspaceIdParamsSchema = projectIdSchema;
 const milestoneSchema = z.object({
   title: z.string().trim().min(2).max(100),
@@ -49,12 +50,14 @@ const taskUpdateSchema = z.object({
   milestoneId: z.union([z.literal(""), z.string().regex(/^[a-f\d]{24}$/i)]).optional(),
   dueDate: z.union([z.literal(""), z.iso.date()]).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "Choose a task update.");
+const taskCommentSchema = z.object({ text: z.string().trim().min(1).max(1000) }).strict();
 
 const inviteParamsSchema = z.object({ id: z.string().regex(/^[a-f\d]{24}$/i, "Invalid project id."), inviteeId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid student id.") }).strict();
 const invitationDecisionParamsSchema = z.object({ id: z.string().regex(/^[a-f\d]{24}$/i, "Invalid project id."), invitationId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid invitation id.") }).strict();
 const invitationDecisionSchema = z.object({ action: z.enum(["accept", "decline"]) }).strict();
 const resourceParamsSchema = z.object({ id: z.string().regex(/^[a-f\d]{24}$/i, "Invalid project id."), resourceId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid resource id.") }).strict();
 const memberParamsSchema = z.object({ id: z.string().regex(/^[a-f\d]{24}$/i, "Invalid project id."), memberId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid member id.") }).strict();
+const memberRoleUpdateSchema = z.object({ role: z.enum(["admin", "member", "viewer"]) }).strict();
 const resourceSchema = z.object({
   title: z.string().trim().min(2).max(100),
   url: z.url().max(2200).refine((value) => ["http:", "https:"].includes(new URL(value).protocol), "Use a valid http or https URL."),
@@ -64,4 +67,4 @@ const resourceSchema = z.object({
   size: z.number().int().min(0).max(50 * 1024 * 1024).optional().default(0),
 }).strict().refine((value) => value.type !== "file" || Boolean(value.fileName), "Choose a file to share.");
 
-export { invitationDecisionParamsSchema, invitationDecisionSchema, inviteParamsSchema, joinRequestSchema, listQuerySchema, memberParamsSchema, milestoneIdParamsSchema, milestoneSchema, milestoneUpdateSchema, projectIdSchema, projectSchema, projectUpdateSchema, requestDecisionSchema, requestParamsSchema, resourceParamsSchema, resourceSchema, taskIdParamsSchema, taskSchema, taskUpdateSchema, workspaceIdParamsSchema };
+export { invitationDecisionParamsSchema, invitationDecisionSchema, inviteParamsSchema, joinRequestSchema, listQuerySchema, memberParamsSchema, memberRoleUpdateSchema, milestoneIdParamsSchema, milestoneSchema, milestoneUpdateSchema, projectIdSchema, projectSchema, projectUpdateSchema, requestDecisionSchema, requestParamsSchema, resourceParamsSchema, resourceSchema, taskCommentParamsSchema, taskCommentSchema, taskIdParamsSchema, taskSchema, taskUpdateSchema, workspaceIdParamsSchema };

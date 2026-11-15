@@ -44,7 +44,7 @@ function AppRoutes() {
       <Route path="/post/:id" element={<ProtectedRoute><PostDetail /></ProtectedRoute>} />
       <Route path="/explore" element={<ProtectedRoute><Explore /></ProtectedRoute>} />
       <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-      <Route path="/projects/:id" element={<ProtectedRoute><ProjectWorkspace /></ProtectedRoute>} />
+      <Route path="/projects/:id/*" element={<ProtectedRoute><ProjectWorkspace /></ProtectedRoute>} />
       <Route path="/connections" element={<ProtectedRoute><Connections /></ProtectedRoute>} />
       <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />

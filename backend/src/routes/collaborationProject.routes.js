@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { addCollaborationProject, addMilestone, addTask, addWorkspaceResource, applyToProject, editCollaborationProject, editMilestone, editTask, getCollaborationProjects, getJoinedCollaborationProjects, getMyCollaborationProjects, getPendingProjectRequestCount, getProjectInvitations, getWorkspace, handleProjectRequest, inviteTeammate, removeCollaborationProject, removeMilestone, removeTask, removeTeammate, removeWorkspaceResource, respondProjectInvitation } from "../controllers/collaborationProject.controller.js";
+import { addCollaborationProject, addMilestone, addTask, addTaskComment, addWorkspaceResource, applyToProject, changeTeammateRole, editCollaborationProject, editMilestone, editTask, getCollaborationProjects, getJoinedCollaborationProjects, getMyCollaborationProjects, getPendingProjectRequestCount, getProjectInvitations, getWorkspace, handleProjectRequest, inviteTeammate, removeCollaborationProject, removeMilestone, removeTask, removeTaskComment, removeTeammate, removeWorkspaceResource, respondProjectInvitation } from "../controllers/collaborationProject.controller.js";
 import { asyncHandler } from "../middleware/async.middleware.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { validate, validateParams } from "../middleware/validate.middleware.js";
-import { invitationDecisionParamsSchema, invitationDecisionSchema, inviteParamsSchema, joinRequestSchema, listQuerySchema, memberParamsSchema, milestoneIdParamsSchema, milestoneSchema, milestoneUpdateSchema, projectIdSchema, projectSchema, projectUpdateSchema, requestDecisionSchema, requestParamsSchema, resourceParamsSchema, resourceSchema, taskIdParamsSchema, taskSchema, taskUpdateSchema, workspaceIdParamsSchema } from "../validators/collaborationProject.validator.js";
+import { invitationDecisionParamsSchema, invitationDecisionSchema, inviteParamsSchema, joinRequestSchema, listQuerySchema, memberParamsSchema, memberRoleUpdateSchema, milestoneIdParamsSchema, milestoneSchema, milestoneUpdateSchema, projectIdSchema, projectSchema, projectUpdateSchema, requestDecisionSchema, requestParamsSchema, resourceParamsSchema, resourceSchema, taskCommentParamsSchema, taskCommentSchema, taskIdParamsSchema, taskSchema, taskUpdateSchema, workspaceIdParamsSchema } from "../validators/collaborationProject.validator.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -19,6 +19,7 @@ router.post("/:id/requests", validateParams(projectIdSchema), validate(joinReque
 router.patch("/:id/requests/:requestId", validateParams(requestParamsSchema), validate(requestDecisionSchema), asyncHandler(handleProjectRequest));
 router.get("/:id/workspace", validateParams(workspaceIdParamsSchema), asyncHandler(getWorkspace));
 router.delete("/:id/members/:memberId", validateParams(memberParamsSchema), asyncHandler(removeTeammate));
+router.patch("/:id/members/:memberId/role", validateParams(memberParamsSchema), validate(memberRoleUpdateSchema), asyncHandler(changeTeammateRole));
 router.post("/:id/invitations/:inviteeId", validateParams(inviteParamsSchema), asyncHandler(inviteTeammate));
 router.patch("/:id/invitations/:invitationId", validateParams(invitationDecisionParamsSchema), validate(invitationDecisionSchema), asyncHandler(respondProjectInvitation));
 router.post("/:id/resources", validateParams(projectIdSchema), validate(resourceSchema), asyncHandler(addWorkspaceResource));
@@ -29,4 +30,6 @@ router.delete("/:id/milestones/:milestoneId", validateParams(milestoneIdParamsSc
 router.post("/:id/tasks", validateParams(projectIdSchema), validate(taskSchema), asyncHandler(addTask));
 router.patch("/:id/tasks/:taskId", validateParams(taskIdParamsSchema), validate(taskUpdateSchema), asyncHandler(editTask));
 router.delete("/:id/tasks/:taskId", validateParams(taskIdParamsSchema), asyncHandler(removeTask));
+router.post("/:id/tasks/:taskId/comments", validateParams(taskIdParamsSchema), validate(taskCommentSchema), asyncHandler(addTaskComment));
+router.delete("/:id/tasks/:taskId/comments/:commentId", validateParams(taskCommentParamsSchema), asyncHandler(removeTaskComment));
 export default router;

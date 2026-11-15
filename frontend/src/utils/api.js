@@ -52,6 +52,7 @@ export const api = {
   decideProjectInvitation: (projectId, invitationId, action) => request(`/projects/${encodeURIComponent(projectId)}/invitations/${encodeURIComponent(invitationId)}`, { method: "PATCH", body: JSON.stringify({ action }) }),
   projectWorkspace: (id) => request(`/projects/${encodeURIComponent(id)}/workspace`),
   removeProjectTeammate: (id, memberId) => request(`/projects/${encodeURIComponent(id)}/members/${encodeURIComponent(memberId)}`, { method: "DELETE" }),
+  updateProjectMemberRole: (id, memberId, role) => request(`/projects/${encodeURIComponent(id)}/members/${encodeURIComponent(memberId)}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
   addProjectResource: (id, payload) => request(`/projects/${encodeURIComponent(id)}/resources`, { method: "POST", body: JSON.stringify(payload) }),
   removeProjectResource: (id, resourceId) => request(`/projects/${encodeURIComponent(id)}/resources/${encodeURIComponent(resourceId)}`, { method: "DELETE" }),
   createProjectMilestone: (id, payload) => request(`/projects/${encodeURIComponent(id)}/milestones`, { method: "POST", body: JSON.stringify(payload) }),
@@ -60,6 +61,8 @@ export const api = {
   createProjectTask: (id, payload) => request(`/projects/${encodeURIComponent(id)}/tasks`, { method: "POST", body: JSON.stringify(payload) }),
   updateProjectTask: (id, taskId, payload) => request(`/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteProjectTask: (id, taskId) => request(`/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" }),
+  addProjectTaskComment: (id, taskId, payload) => request(`/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}/comments`, { method: "POST", body: JSON.stringify(payload) }),
+  deleteProjectTaskComment: (id, taskId, commentId) => request(`/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}/comments/${encodeURIComponent(commentId)}`, { method: "DELETE" }),
   post: (id) => request(`/posts/${encodeURIComponent(id)}`),
   postComments: (id) => request(`/posts/${encodeURIComponent(id)}/comments`),
   createPost: (payload) => request("/posts", { method: "POST", body: JSON.stringify(payload) }),
@@ -83,6 +86,7 @@ export const api = {
   deleteMessage: (userId, messageId) => request(`/messages/${encodeURIComponent(userId)}/${encodeURIComponent(messageId)}`, { method: "DELETE" }),
   toggleMessageReaction: (userId, messageId, emoji) => request(`/messages/${encodeURIComponent(userId)}/${encodeURIComponent(messageId)}/reaction`, { method: "PUT", body: JSON.stringify({ emoji }) }),
   imagekitAuth: () => request("/uploads/imagekit/auth"),
+  aiSuggestions: (payload) => request("/ai/suggestions", { method: "POST", body: JSON.stringify(payload) }),
 };
 
 

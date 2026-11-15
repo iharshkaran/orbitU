@@ -16,6 +16,7 @@ import {
   Video,
   FileText,
   ChevronDown,
+  Sparkles,
 } from "lucide-react";
 import { api } from "../utils/api";
 import { useConnectlyStore } from "../store/useConnectlyStore";
@@ -51,6 +52,9 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
   const [posts, setPosts] = useState(() => cachedPosts || []);
   const [postText, setPostText] = useState("");
   const [category, setCategory] = useState("General");
+  const [captionSuggestions, setCaptionSuggestions] = useState([]);
+  const [generatingCaption, setGeneratingCaption] = useState(false);
+  const [captionError, setCaptionError] = useState("");
   const [image, setImage] = useState("");
   const [imagePreview, setImagePreview] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
@@ -154,10 +158,43 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
 
   function updatePostText(event) {
     setPostText(event.target.value);
+    setCaptionSuggestions([]);
+    setCaptionError("");
     const textarea = event.target;
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 268)}px`;
     textarea.style.overflowY = textarea.scrollHeight > 268 ? "auto" : "hidden";
+  }
+
+  async function generateCaptionSuggestions() {
+    if (generatingCaption) return;
+    setGeneratingCaption(true);
+    setCaptionError("");
+    setCaptionSuggestions([]);
+    try {
+      const result = await api.aiSuggestions({
+        type: "caption",
+        draft: postText.trim(),
+        category,
+        mediaType: image ? "image" : media?.type || "none",
+        imageUrl: image || "",
+      });
+      setCaptionSuggestions(result.suggestions || []);
+    } catch (requestError) {
+      setCaptionError(requestError.message);
+    } finally {
+      setGeneratingCaption(false);
+    }
+  }
+
+  function useCaptionSuggestion(suggestion) {
+    setPostText(suggestion);
+    setCaptionSuggestions([]);
+    requestAnimationFrame(() => {
+      if (!postTextareaRef.current) return;
+      postTextareaRef.current.style.height = "auto";
+      postTextareaRef.current.style.height = `${Math.min(postTextareaRef.current.scrollHeight, 268)}px`;
+    });
   }
 
   async function handleMediaChange(event, mediaType) {
@@ -235,6 +272,8 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
       setPostingPost(false);
     }
     setPostText("");
+    setCaptionSuggestions([]);
+    setCaptionError("");
     if (postTextareaRef.current) {
       postTextareaRef.current.style.height = "56px";
       postTextareaRef.current.style.overflowY = "hidden";
@@ -449,6 +488,19 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
           maxLength={3000}
           className="mt-3 max-h-[268px] min-h-14 w-full resize-none overflow-y-hidden rounded-2xl border-2 border-[#e7dfd0] bg-[#fffdf9] p-3 text-sm leading-6 text-[#17182d] outline-none placeholder:text-[#858191] focus:border-[#7660dc]"
         />
+
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-[#858191]">Add details or a photo, then let AI draft caption options.</p>
+          <button type="button" onClick={generateCaptionSuggestions} disabled={generatingCaption || imageUploading} className="inline-flex items-center gap-1.5 rounded-lg border border-[#d9d0ff] bg-[#f3efff] px-3 py-1.5 text-xs font-semibold text-[#5947a8] transition hover:bg-[#e9e2ff] disabled:cursor-wait disabled:opacity-50">
+            {generatingCaption ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {generatingCaption ? "Writing captions…" : "Generate caption"}
+          </button>
+        </div>
+        {captionError && <p role="alert" className="mt-2 text-xs text-[#a33b48]">{captionError}</p>}
+        {captionSuggestions.length > 0 && <div className="mt-2 space-y-2 rounded-xl border border-[#e7dfd0] bg-[#fffdf9] p-3">
+          <p className="text-xs font-semibold text-[#514e62]">Choose a caption to use</p>
+          {captionSuggestions.map((suggestion, index) => <button key={`${index}-${suggestion}`} type="button" onClick={() => useCaptionSuggestion(suggestion)} className="block w-full rounded-lg border border-[#eee8dc] bg-white px-3 py-2 text-left text-sm text-[#514e62] transition hover:border-[#b9a9ff] hover:bg-[#f8f5ff]">{suggestion}</button>)}
+        </div>}
 
         {imagePreview && (
           <div className="relative mt-3">
@@ -688,6 +740,7 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
               <div className="mt-3 border-t border-[#e7dfd0] pt-4">
                 <CommentThread
                   postId={post.id}
+                  postText={post.text || ""}
                   comments={comments}
                   currentUserId={user?.id}
                   onChange={(update) => updatePosts((current) => current.map((item) => item.id === post.id ? { ...item, comments: typeof update === "function" ? update(item.comments || []) : update } : item))}
