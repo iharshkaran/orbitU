@@ -74,8 +74,13 @@ export const api = {
   markNotificationsRead: (id) => request("/notifications/read", { method: "PATCH", body: JSON.stringify(id ? { id } : {}) }),
   dismissNotification: (id) => request(`/notifications/${id}`, { method: "DELETE" }),
   messageInbox: () => request("/messages"),
+  messagePresence: () => request("/messages/presence"),
+  messageTyping: (userId) => request(`/messages/typing/${encodeURIComponent(userId)}`, { method: "POST", body: "{}" }),
   messageThread: (userId) => request(`/messages/${encodeURIComponent(userId)}`),
-  sendMessage: (userId, text) => request(`/messages/${encodeURIComponent(userId)}`, { method: "POST", body: JSON.stringify({ text }) }),
+  sendMessage: (userId, text, replyToId) => request(`/messages/${encodeURIComponent(userId)}`, { method: "POST", body: JSON.stringify({ text, ...(replyToId ? { replyToId } : {}) }) }),
+  editMessage: (userId, messageId, text) => request(`/messages/${encodeURIComponent(userId)}/${encodeURIComponent(messageId)}`, { method: "PATCH", body: JSON.stringify({ text }) }),
+  deleteMessage: (userId, messageId) => request(`/messages/${encodeURIComponent(userId)}/${encodeURIComponent(messageId)}`, { method: "DELETE" }),
+  toggleMessageReaction: (userId, messageId, emoji) => request(`/messages/${encodeURIComponent(userId)}/${encodeURIComponent(messageId)}/reaction`, { method: "PUT", body: JSON.stringify({ emoji }) }),
   imagekitAuth: () => request("/uploads/imagekit/auth"),
 };
 

@@ -15,7 +15,11 @@ function connect() {
   if (eventSource || listeners.size === 0 || typeof EventSource === "undefined") return;
   eventSource = new EventSource(`${API_BASE}/messages/events`, { withCredentials: true });
   eventSource.addEventListener("message", (event) => dispatch("message", event));
+  eventSource.addEventListener("message_update", (event) => dispatch("message_update", event));
   eventSource.addEventListener("read", (event) => dispatch("read", event));
+  eventSource.addEventListener("presence", (event) => dispatch("presence", event));
+  eventSource.addEventListener("presence_snapshot", (event) => dispatch("presence_snapshot", event));
+  eventSource.addEventListener("typing", (event) => dispatch("typing", event));
 }
 
 export function subscribeMessageEvents(listener) {

@@ -1,4 +1,4 @@
-import { createMessage, listMessageInbox, listMessageThread } from "../services/message.service.js";
+import { createMessage, deleteMessage, editMessage, listMessageInbox, listMessagePresence, listMessageThread, publishTypingStatus, toggleMessageReaction } from "../services/message.service.js";
 import { subscribeToMessageEvents } from "../services/messageEvents.service.js";
 
 export function streamMessageEvents(req, res) {
@@ -24,12 +24,37 @@ export async function getInbox(req, res) {
   return res.json({ success: true, data: inbox });
 }
 
+export async function getPresence(req, res) {
+  const presence = await listMessagePresence(req.user._id);
+  return res.json({ success: true, data: presence });
+}
+
 export async function getThread(req, res) {
   const messages = await listMessageThread({ userId: req.user._id, otherUserId: req.params.userId });
   return res.json({ success: true, data: messages });
 }
 
 export async function sendMessage(req, res) {
-  const message = await createMessage({ user: req.user, otherUserId: req.params.userId, text: req.validated.text });
+  const message = await createMessage({ user: req.user, otherUserId: req.params.userId, ...req.validated });
   return res.status(201).json({ success: true, data: message });
+}
+
+export async function updateMessage(req, res) {
+  const message = await editMessage({ user: req.user, otherUserId: req.params.userId, messageId: req.params.messageId, text: req.validated.text });
+  return res.json({ success: true, data: message });
+}
+
+export async function removeMessage(req, res) {
+  const result = await deleteMessage({ user: req.user, otherUserId: req.params.userId, messageId: req.params.messageId });
+  return res.json({ success: true, data: result });
+}
+
+export async function reactToMessage(req, res) {
+  const result = await toggleMessageReaction({ user: req.user, otherUserId: req.params.userId, messageId: req.params.messageId, emoji: req.validated.emoji });
+  return res.json({ success: true, data: result });
+}
+
+export async function sendTyping(req, res) {
+  await publishTypingStatus({ user: req.user, otherUserId: req.params.userId });
+  return res.status(204).end();
 }
