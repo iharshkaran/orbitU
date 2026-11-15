@@ -26,6 +26,7 @@ import PostEditModal from "./PostEditModal";
 import PdfPreview from "./PdfPreview";
 import CommentThread from "./CommentThread";
 import PostLikesModal from "./PostLikesModal";
+import InlineEmojiPicker from "./InlineEmojiPicker";
 import { removeRapidDuplicateComments } from "../utils/comments";
 
 const categories = [
@@ -697,18 +698,16 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
                   onSubmit={(event) => addComment(event, post.id)}
                   className="mt-4 flex gap-2"
                 >
-                  <input
-                    value={commentDrafts[post.id] || ""}
-                    onChange={(event) =>
-                      setCommentDrafts((current) => ({
-                        ...current,
-                        [post.id]: event.target.value,
-                      }))
-                    }
-                    placeholder="Write a comment..."
-                    maxLength={500}
-                    className="min-w-0 flex-1 rounded-xl border border-[#e7dfd0] bg-[#fffdf9] px-3 py-2.5 text-sm outline-none placeholder:text-[#858191] focus:border-[#7660dc]"
-                  />
+                  <InlineEmojiPicker onSelect={(emoji) => setCommentDrafts((current) => ({ ...current, [post.id]: `${current[post.id] || ""}${emoji}` }))} />
+                  <div className="min-w-0 flex-1">
+                    <input
+                      value={commentDrafts[post.id] || ""}
+                      onChange={(event) => setCommentDrafts((current) => ({ ...current, [post.id]: event.target.value }))}
+                      placeholder="Write a comment..."
+                      maxLength={500}
+                      className="w-full rounded-xl border border-[#e7dfd0] bg-[#fffdf9] px-3 py-2.5 text-sm outline-none placeholder:text-[#858191] focus:border-[#7660dc]"
+                    />
+                  </div>
                   <button
                     type="submit"
                     aria-label="Send comment"

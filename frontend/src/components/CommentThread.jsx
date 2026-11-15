@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { MessageCircle, Pencil, Send, Trash2, X } from "lucide-react";
 import { api } from "../utils/api";
+import InlineEmojiPicker from "./InlineEmojiPicker";
 
 function descendantsOf(comments, parentId) {
   const ids = new Set([parentId]);
@@ -89,7 +90,8 @@ function CommentItem({ comment, currentUserId, postId, onChange, onError, allCom
           {comment.createdAt && <time className="text-[10px] text-[#858191]">{new Date(comment.createdAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</time>}
         </div>}
         {replying && <form onSubmit={submitReply} className="mt-2 flex gap-2">
-          <input autoFocus value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} maxLength={500} placeholder={`Reply to ${comment.name}…`} className="min-w-0 flex-1 rounded-lg border border-[#e7dfd0] bg-white px-2.5 py-2 text-xs outline-none focus:border-[#7660dc]" />
+          <InlineEmojiPicker onSelect={(emoji) => setReplyDraft((current) => `${current}${emoji}`)} />
+          <input autoFocus value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} maxLength={500} placeholder={`Reply to ${comment.name}…`} className="w-full min-w-0 flex-1 rounded-lg border border-[#e7dfd0] bg-white px-2.5 py-2 text-xs outline-none focus:border-[#7660dc]" />
           <button type="submit" disabled={!replyDraft.trim() || busy} aria-label="Send reply" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#191a32] bg-[#ffe35b] text-black disabled:opacity-50">{busy ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-black/25 border-t-black" /> : <Send size={14} />}</button>
           <button type="button" onClick={() => setReplying(false)} aria-label="Cancel reply" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e7dfd0] text-[#6e6a7b]"><X size={14} /></button>
         </form>}

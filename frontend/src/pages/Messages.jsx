@@ -8,21 +8,22 @@ import { useConnectlyStore } from "../store/useConnectlyStore";
 import { subscribeMessageEvents } from "../utils/messageEvents";
 import { useAuth } from "../context/useAuth";
 import { uploadFileToImageKit } from "../utils/imagekitUpload";
+import { EMOJI_CATEGORIES, FLAG_EMOJIS } from "../utils/emojiData";
 
 const QUICK_EMOJIS = ["❤️", "😂", "👍", "😮", "😢", "🔥", "🙏", "👏", "🎉"];
-const FLAG_CODES = "AC AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CP CR CU CV CW CX CY CZ DE DG DJ DK DM DO DZ EA EC EE EG EH ER ES ET EU FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU IC ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TA TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM UN US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW".split(" ");
-const FLAG_EMOJIS = FLAG_CODES.map((code) => String.fromCodePoint(...[...code].map((letter) => 0x1f1e6 + letter.charCodeAt(0) - 65)));
-const EMOJI_CATEGORIES = [
-  { name: "Smileys", emojis: "😀 😃 😄 😁 😆 😅 😂 🤣 🥲 ☺️ 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🥸 🤩 🥳 🙂‍↕️ 🙂‍↔️ 😏 😒 🙂‍↔️ 😞 😔 😟 😕 🙁 ☹️ 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🫣 🤭 🫢 🫡 🤫 🫠 🤥 😶 😶‍🌫️ 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 😵‍💫 🫥 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 🤑 🤠 😈 👿 👹 👺 💀 ☠️ 👻 👽 👾 🤖 💩".split(" ") },
-  { name: "People", emojis: "👋 🤚 🖐️ ✋ 🖖 🫱 🫲 🫳 🫴 🫷 🫸 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 ✍️ 💅 🤳 💪 🦾 🦿 🦵 🦶 👂 🦻 👃 🧠 🫀 🫁 🦷 🦴 👀 👁️ 👅 👄 🫦 👶 🧒 👦 👧 🧑 👱 👨 🧔 🧔‍♂️ 🧔‍♀️ 👨‍🦰 👨‍🦱 👨‍🦳 👨‍🦲 👩 👩‍🦰 👩‍🦱 👩‍🦳 👩‍🦲 🧓 👴 👵 🙍 🙎 🙅 🙆 💁 🙋 🧏 🙇 🤦 🤷 👮 🕵️ 💂 🥷 👷 🫅 🤴 👸 👳 👲 🧕 🤵 👰 🤰 🫃 🫄 🤱 👩‍🍼 👨‍🍼 🧑‍🍼 👼 🎅 🤶 🧑‍🎄 🦸 🦹 🧙 🧚 🧛 🧜 🧝 🧞 🧟 💆 💇 🚶 🧍 🧎 🏃 💃 🕺 🕴️ 👯 🧖 🧗 🤺 🏇 ⛷️ 🏂 🏌️ 🏄 🚣 🏊 ⛹️ 🏋️ 🚴 🚵 🤸 🤼 🤽 🤾 🤹 🧘 🛀 🛌".split(" ") },
-  { name: "Animals", emojis: "🐵 🙈 🙉 🙊 🐒 🦍 🦧 🐶 🐕 🦮 🐕‍🦺 🐩 🐺 🦊 🦝 🐱 🐈 🦁 🐯 🐅 🐆 🐴 🫎 🫏 🐎 🦄 🦓 🦌 🦬 🐮 🐂 🐃 🐄 🐷 🐖 🐗 🐽 🐏 🐑 🐐 🐪 🐫 🦙 🦒 🐘 🦣 🦏 🦛 🐭 🐁 🐀 🐹 🐰 🐇 🐿️ 🦫 🦔 🦇 🐻 🐻‍❄️ 🐨 🐼 🦥 🦦 🦨 🦘 🦡 🐾 🦃 🐔 🐓 🐣 🐤 🐥 🐦 🐧 🕊️ 🦅 🦆 🦢 🦉 🦤 🪶 🦩 🦚 🦜 🪽 🐸 🐊 🐢 🦎 🐍 🐲 🐉 🦕 🦖 🐳 🐋 🐬 🦭 🐟 🐠 🐡 🦈 🐙 🐚 🪸 🪼 🦀 🦞 🦐 🦑 🦪 🐌 🦋 🐛 🐜 🐝 🪲 🐞 🦗 🪳 🕷️ 🕸️ 🦂 🦟 🪰 🪱 🦠 🌵 🎄 🌲 🌳 🌴 🪵 🌱 🌿 ☘️ 🍀 🎍 🪴 🎋 🍃 🍂 🍁 🪺 🪹 🍄 🌾 💐 🌷 🪷 🌹 🥀 🌺 🌸 🌼 🌻".split(" ") },
-  { name: "Food", emojis: "🍇 🍈 🍉 🍊 🍋 🍋‍🟩 🍌 🍍 🥭 🍎 🍏 🍐 🍑 🍒 🍓 🫐 🥝 🍅 🫒 🥥 🥑 🍆 🥔 🥕 🌽 🌶️ 🫑 🥒 🥬 🥦 🧄 🧅 🥜 🫘 🌰 🫚 🫛 🍄‍🟫 🍞 🥐 🥖 🫓 🥨 🥯 🥞 🧇 🧀 🍖 🍗 🥩 🥓 🍔 🍟 🍕 🌭 🥪 🌮 🌯 🫔 🥙 🧆 🥚 🍳 🥘 🍲 🫕 🥣 🥗 🍿 🧈 🧂 🥫 🍱 🍘 🍙 🍚 🍛 🍜 🍝 🍠 🍢 🍣 🍤 🍥 🥮 🍡 🥟 🥠 🥡 🦪 🍦 🍧 🍨 🍩 🍪 🎂 🍰 🧁 🥧 🍫 🍬 🍭 🍮 🍯 🍼 🥛 ☕ 🫖 🍵 🍶 🍾 🍷 🍸 🍹 🍺 🍻 🥂 🥃 🫗 🥤 🧋 🧃 🧉 🧊".split(" ") },
-  { name: "Travel", emojis: "🌍 🌎 🌏 🌐 🗺️ 🗾 🧭 🏔️ ⛰️ 🌋 🗻 🏕️ 🏖️ 🏜️ 🏝️ 🏞️ 🏟️ 🏛️ 🏗️ 🧱 🪨 🪵 🛖 🏘️ 🏚️ 🏠 🏡 🏢 🏣 🏤 🏥 🏦 🏨 🏩 🏪 🏫 🏬 🏭 🏯 🏰 💒 🗼 🗽 ⛪ 🕌 🛕 🕍 ⛩️ 🕋 ⛲ ⛺ 🌁 🌃 🏙️ 🌄 🌅 🌆 🌇 🌉 ♨️ 🎠 🛝 🎡 🎢 💈 🎪 🚂 🚃 🚄 🚅 🚆 🚇 🚈 🚉 🚊 🚝 🚞 🚋 🚌 🚍 🚎 🚐 🚑 🚒 🚓 🚔 🚕 🚖 🚗 🚘 🚙 🛻 🚚 🚛 🚜 🏎️ 🏍️ 🛵 🛺 🚲 🛴 🛹 🛼 🚏 🛣️ 🛤️ 🛢️ ⛽ 🛞 🚨 🚥 🚦 🛑 🚧 ⚓ 🛟 ⛵ 🚤 🛳️ ⛴️ 🛥️ 🚢 ✈️ 🛩️ 🛫 🛬 🪂 💺 🚁 🚟 🚠 🚡 🛰️ 🚀 🛸 🧳 🌌".split(" ") },
-  { name: "Activities", emojis: "⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🪀 🏓 🏸 🏒 🏑 🥍 🏏 🪃 🥅 ⛳ 🪁 🏹 🎣 🤿 🥊 🥋 🎽 🛹 🛼 🛷 ⛸️ 🥌 🎿 ⛷️ 🏂 🪂 🏋️ 🤼 🤸 ⛹️ 🤺 🏇 🧘 🏄 🚣 🏊 🤽 🤾 🧗 🧗‍♀️ 🧗‍♂️ 🚴 🚵 🏆 🥇 🥈 🥉 🏅 🎖️ 🏵️ 🎗️ 🎫 🎟️ 🎪 🤹 🎭 🩰 🎨 🎬 🎤 🎧 🎼 🎹 🥁 🪘 🎷 🎺 🪗 🎸 🪕 🎻 🪈 🎲 ♟️ 🎯 🎳 🎮 🕹️ 🎰 🧩 🪅 🪩 🪆 🧸 🪄 🎁 🎊 🎉 🎈".split(" ") },
-  { name: "Objects", emojis: "💌 📩 📧 💻 🖥️ 🖨️ ⌨️ 🖱️ 🖲️ 💽 💾 💿 📀 🧮 🎥 🎞️ 📽️ 🎬 📺 📷 📸 📹 📼 🔍 🔎 🕯️ 💡 🔦 🏮 🪔 📔 📕 📖 📗 📘 📙 📚 📓 📒 📃 📜 📄 📰 🗞️ 📑 🔖 🏷️ 💰 🪙 💴 💵 💶 💷 💸 💳 🧾 💹 ✉️ 📦 📫 📪 📬 📭 📮 🗳️ ✏️ ✒️ 🖋️ 🖊️ 🖌️ 🖍️ 📝 💼 📁 📂 🗂️ 📅 📆 🗒️ 🗓️ 📇 📈 📉 📊 📋 📌 📍 📎 🖇️ 📏 📐 ✂️ 🗃️ 🗄️ 🗑️ 🔒 🔓 🔏 🔐 🔑 🗝️ 🔨 🪓 ⛏️ ⚒️ 🛠️ 🗡️ ⚔️ 💣 🪃 🏹 🛡️ 🪚 🔧 🪛 🔩 ⚙️ 🗜️ ⚖️ 🦯 🔗 ⛓️ 🪝 🧰 🧲 🪜 ⚗️ 🧪 🧫 🧬 🔬 🔭 📡 💉 🩸 💊 🩹 🩼 🩺 🩻 🚪 🛗 🪞 🪟 🛏️ 🛋️ 🪑 🚽 🪠 🚿 🛁 🪤 🪒 🧴 🧷 🧹 🧺 🧻 🪣 🧼 🫧 🪥 🧽 🧯 🛒 🚬 ⚰️ 🪦 ⚱️ 🧿 🪬 🪧".split(" ") },
-  { name: "Symbols", emojis: "❤️ 🧡 💛 💚 💙 🩵 💜 🖤 🩶 🤍 🤎 💔 ❤️‍🔥 ❤️‍🩹 💕 💞 💓 💗 💖 💘 💝 💟 ❣️ 💌 💋 💯 💢 💥 💫 💦 💨 🕳️ 💬 👁️‍🗨️ 🗨️ 🗯️ 💭 💤 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔯 🕎 ☯️ ☦️ 🛐 ⛎ ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ 🆔 ⚛️ 🉑 ☢️ ☣️ 📴 📳 🈶 🈚 🈸 🈺 🈷️ ✴️ 🆚 💮 🉐 ㊙️ ㊗️ 🈴 🈵 🈹 🈲 🅰️ 🅱️ 🆎 🆑 🅾️ 🆘 ❌ ⭕ 🛑 ⛔ 📛 🚫 💟 ❗ ❕ ❓ ❔ ‼️ ⁉️ 🔅 🔆 ⚠️ 🚸 🔱 ⚜️ 🔰 ♻️ ✅ 🈯 💹 ❇️ ✳️ ❎ 🌐 💠 Ⓜ️ 🌀 💤 🏧 🚾 ♿ 🅿️ 🛗 🛂 🛃 🛄 🛅 🚹 🚺 🚻 🚼 🚮 🎦 📶 🈁 🔣 ℹ️ 🔤 🔡 🔠 🆖 🆗 🆙 🆒 🆕 🆓 🔟 🔢 #️⃣ *️⃣ 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ 🔀 🔁 🔂 ▶️ ⏩ ⏭️ ⏯️ ◀️ ⏪ ⏮️ 🔼 ⏫ 🔽 ⏬ ⏸️ ⏹️ ⏺️ ⏏️ 🎦 🔅 🔆 📶 🔍 🔎 ➕ ➖ ➗ ✖️ 🟰 ♾️ 💲 💱 ™️ ©️ ®️ 🔚 🔙 🔛 🔝 🔜 ☑️ ✔️ ❌ ✖️ ➰ ➿ 〽️ ✳️ ✴️ ❇️ ‼️〰️ ➡️ ⬅️ ⬆️ ⬇️ ↗️ ↘️ ↙️ ↖️ ↕️ ↔️ ↪️ ↩️ ⤴️ ⤵️ 🔃 🔄 🔙 🔚 🔛 🔜 🔝 🔀 🔁 🔂".split(" ") },
-  { name: "Flags", emojis: FLAG_EMOJIS },
-];
+
+function flagAssetUrl(emoji) {
+  const codepoints = [...emoji].map((character) => character.codePointAt(0).toString(16));
+  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/${codepoints.join("-")}.svg`;
+}
+const FLAG_SEQUENCE = /^[\u{1F1E6}-\u{1F1FF}]{2}$/u;
+function MessageText({ text, className = "", flagClassName = "" }) {
+  const parts = String(text || "").split(/([\u{1F1E6}-\u{1F1FF}]{2})/gu);
+  return <span className={className}>{parts.map((part, index) => FLAG_SEQUENCE.test(part)
+    ? <img key={`${part}-${index}`} src={flagAssetUrl(part)} alt={part} title={part} className={`mx-0.5 inline-block h-[1em] w-[1.4em] rounded-[2px] object-cover align-[-0.12em] ${flagClassName}`} />
+    : <span key={`${index}-${part}`}>{part}</span>)}</span>;
+}
+
 
 function groupedReactions(reactions = [], currentUserId) {
   const groups = new Map();
@@ -128,6 +129,7 @@ export default function Messages() {
   const [error, setError] = useState("");
   const threadRef = useRef(null);
   const composerRef = useRef(null);
+  const composerOverlayRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimersRef = useRef(new Map());
   const typingSentAtRef = useRef(new Map());
@@ -135,6 +137,12 @@ export default function Messages() {
   const menuMessage = messages.find((message) => message.id === messageMenuId);
   const reactionPickerMessage = messages.find((message) => message.id === reactionPickerId);
   const activePresence = presenceById[activeId];
+
+  function syncComposerOverlay() {
+    const offset = composerRef.current?.scrollLeft || 0;
+    const textLayer = composerOverlayRef.current?.firstElementChild;
+    if (textLayer) textLayer.style.transform = `translateX(-${offset}px)`;
+  }
   const latestOutgoingId = [...messages].reverse().find((message) => message.from === "you")?.id;
   const visibleChats = useMemo(() => chats.filter((chat) => chat.name.toLowerCase().includes(query.toLowerCase())), [chats, query]);
 
@@ -457,7 +465,7 @@ export default function Messages() {
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {visibleChats.map((chat) => <button key={chat.userId} onClick={() => { if (activeId !== chat.userId) { setMessages([]); setThreadLoading(true); setDraft(""); clearAttachment(); setReplyingTo(null); setEditingMessageId(""); setMessageMenuId(""); setEmojiPickerOpen(false); } setActiveId(chat.userId); }} className={`flex w-full items-center gap-3 border-b border-[#e7dfd0]/80 p-3.5 text-left transition hover:bg-[#f4f0e8] ${activeId === chat.userId ? "bg-[#eee9ff]" : ""}`}>
             <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-[#191a32] bg-[#eee9ff] font-bold text-[#5947a8]">{chat.photo ? <img src={chat.photo} alt="" loading="lazy" decoding="async" className="h-full w-full rounded-full object-cover"/> : chat.initials || chat.name.split(" ").map((part) => part[0]).join("")}{presenceById[chat.userId]?.online && <span aria-label="Online" title="Online" className="absolute bottom-0 right-0 h-3.5 w-3.5 translate-x-1/4 translate-y-1/4 rounded-full border-2 border-white bg-[#36a86a] shadow-sm" />}</span>
-            <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold">{chat.name}</span>{chat.lastMessageAt && <time className="shrink-0 text-[10px] text-[#858191]">{messageTime(chat.lastMessageAt)}</time>}</span><span className={`mt-1 block truncate text-xs ${chat.unreadCount > 0 ? "font-semibold text-[#343247]" : "text-[#6e6a7b]"}`}>{typingById[chat.userId] ? <span className="font-semibold text-[#6f56d9]">typing…</span> : chat.lastMessage}</span></span>
+          <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold">{chat.name}</span>{chat.lastMessageAt && <time className="shrink-0 text-[10px] text-[#858191]">{messageTime(chat.lastMessageAt)}</time>}</span><MessageText className={`mt-1 block truncate text-xs ${chat.unreadCount > 0 ? "font-semibold text-[#343247]" : "text-[#6e6a7b]"}`} text={typingById[chat.userId] ? "typing…" : chat.lastMessage} /></span>
             {chat.unreadCount > 0 && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#ffe35b] px-1 text-[10px] font-bold text-[#17182d]">{chat.unreadCount > 9 ? "9+" : chat.unreadCount}</span>}
           </button>)}
           {!loading && !visibleChats.length && <div className="p-5 text-sm text-[#858191]">{query ? "No matching conversations." : <>You can message accepted connections. <Link to="/explore" className="font-semibold text-[#6f56d9] hover:text-[#5947a8]">Explore students</Link></>}</div>}
@@ -478,12 +486,12 @@ export default function Messages() {
             const messageActions = <><button type="button" onClick={(event) => toggleReactionPicker(event, message.id)} aria-label="Add reaction" title="React to message" className="ml-1 rounded p-0.5 text-[#777386] transition hover:bg-black/5 hover:text-[#5947a8] opacity-100 md:opacity-0 md:group-hover:opacity-100"><Smile size={15}/></button><button type="button" onClick={(event) => toggleMessageMenu(event, message.id)} aria-label="Message options" title="Message options" className="rounded p-0.5 text-[#777386] opacity-100 transition hover:bg-black/5 hover:text-[#17182d] md:opacity-0 md:group-hover:opacity-100"><MoreHorizontal size={15}/></button>{message.editedAt && <span>Edited ·</span>}<time>{messageTime(message.createdAt)}</time>{message.from === "you" && message.id === latestOutgoingId && <span aria-label={message.readAt ? "Seen" : "Sent"}>· {message.readAt ? "Seen" : "Sent"}</span>}</>;
             return <div key={message.id} className={`group relative flex max-w-[92%] flex-none flex-col sm:max-w-[82%] ${message.from === "you" ? "self-end items-end" : "self-start items-start"} ${reactions.length ? "pb-2" : ""}`}>
               <div data-message-bubble className={`relative w-fit max-w-full rounded-2xl border px-3.5 pt-2 ${reactions.length ? "pb-5" : "pb-2"} text-sm leading-5 sm:px-4 ${message.replyTo ? "min-w-[160px]" : ""} ${message.from === "you" ? "rounded-br-md border-[#dfc941] bg-[#ffe96b] text-[#17182d] shadow-[0_2px_0_#e4d04d]" : "rounded-bl-md border-[#ddd5f2] bg-white text-[#343247] shadow-sm"}`}>
-                {message.replyTo && <div className={`mb-1 flex min-w-0 flex-col items-start gap-0 rounded-md border-l-2 px-2 py-1 ${message.from === "you" ? "border-[#7660dc] bg-white/45" : "border-[#7660dc] bg-[#f3efff]"}`}><span className="max-w-full truncate text-[10px] font-bold leading-3 text-[#5947a8]">{message.replyTo.from === "you" ? "You" : message.replyTo.name}</span><span className="max-w-full truncate text-[11px] leading-4 text-[#514e62]">{message.replyTo.text}</span></div>}
+                {message.replyTo && <div className={`mb-1 flex min-w-0 flex-col items-start gap-0 rounded-md border-l-2 px-2 py-1 ${message.from === "you" ? "border-[#7660dc] bg-white/45" : "border-[#7660dc] bg-[#f3efff]"}`}><span className="max-w-full truncate text-[10px] font-bold leading-3 text-[#5947a8]">{message.replyTo.from === "you" ? "You" : message.replyTo.name}</span><MessageText className="block max-w-full truncate text-[11px] leading-4 text-[#514e62]" text={message.replyTo.text} /></div>}
                 {!message.media?.url && <div className="flex w-fit max-w-full items-end gap-1">
-                  {message.text && <p className={`min-w-0 max-w-full whitespace-pre-wrap break-words ${singleEmoji ? "text-2xl leading-[1.15]" : ""}`}>{message.text}</p>}
+                  {message.text && <MessageText text={message.text} className={`min-w-0 max-w-full whitespace-pre-wrap break-words ${singleEmoji ? "text-2xl leading-[1.15]" : ""}`} />}
                   <div className={`flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] leading-3 ${message.from === "you" ? "text-[#625b37]" : "text-[#858191]"}`}>{messageActions}</div>
                 </div>}
-                {message.media?.url && message.text && <p className="max-w-full whitespace-pre-wrap break-words">{message.text}</p>}
+                {message.media?.url && message.text && <MessageText text={message.text} className="block max-w-full whitespace-pre-wrap break-words" />}
                 {message.media?.url && <div className="mb-1 mt-2 max-w-full overflow-hidden rounded-xl border border-black/10 bg-white/70">
                   {message.media.type === "image" ? <a href={message.media.url} target="_blank" rel="noreferrer" aria-label={`Open ${message.media.name || "shared image"}`}><img src={message.media.url} alt={message.media.name || "Shared image"} loading="lazy" decoding="async" className="max-h-72 max-w-full object-contain" /></a>
                     : message.media.type === "video" ? <video src={message.media.url} controls preload="metadata" className="max-h-72 w-full max-w-[min(22rem,75vw)] bg-black" aria-label={message.media.name || "Shared video"} />
@@ -511,13 +519,18 @@ export default function Messages() {
             <div className="relative shrink-0">
               <button type="button" onClick={() => setEmojiPickerOpen((open) => !open)} aria-label="Choose emoji" title="Choose emoji" className={`flex h-11 w-11 items-center justify-center rounded-xl border border-[#e7dfd0] transition hover:bg-[#f4f0e8] ${emojiPickerOpen ? "bg-[#eee9ff] text-[#5947a8]" : "bg-white text-[#6e6a7b]"}`}><Smile size={19}/></button>
               {emojiPickerOpen && <div role="dialog" aria-label="Emoji picker" className="absolute bottom-full left-0 z-30 mb-2 overflow-hidden rounded-2xl border border-[#191a32] bg-white shadow-[3px_4px_0_#c9bcff]" style={{ width: "min(320px, calc(100vw - 2rem))" }}>
-                <div className="flex gap-1 overflow-x-auto border-b border-[#e7dfd0] p-2">{EMOJI_CATEGORIES.map(({ name, emojis }) => <button key={name} type="button" onClick={() => setEmojiCategory(name)} aria-label={name} title={name} className={`shrink-0 rounded-lg px-2 py-1.5 text-base transition ${emojiCategory === name ? "bg-[#eee9ff] text-[#5947a8]" : "text-[#6e6a7b] hover:bg-[#f4f0e8]"}`}>{emojis[0]}</button>)}</div>
-                <div className="max-h-56 overflow-y-auto p-2"><p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-[#858191]">{emojiCategory}</p><div className="grid grid-cols-8 gap-0.5">{(EMOJI_CATEGORIES.find(({ name }) => name === emojiCategory)?.emojis || []).map((emoji, index) => <button key={`${emoji}-${index}`} type="button" onClick={() => appendEmoji(emoji)} aria-label={`Add ${emoji}`} className="flex h-9 items-center justify-center rounded-lg text-xl transition hover:bg-[#f4f0e8]">{emoji}</button>)}</div></div>
+                <div className="flex gap-1 overflow-x-auto border-b border-[#e7dfd0] p-2">{EMOJI_CATEGORIES.map(({ name, emojis }) => <button key={name} type="button" onClick={() => setEmojiCategory(name)} aria-label={name} title={name} className={`shrink-0 rounded-lg px-2 py-1.5 text-base transition ${emojiCategory === name ? "bg-[#eee9ff] text-[#5947a8]" : "text-[#6e6a7b] hover:bg-[#f4f0e8]"}`}>{name === "Flags" ? "🏳️" : emojis[0]}</button>)}</div>
+                <div className="max-h-56 overflow-y-auto p-2"><p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-[#858191]">{emojiCategory}</p><div className="grid grid-cols-8 gap-0.5">{(EMOJI_CATEGORIES.find(({ name }) => name === emojiCategory)?.emojis || []).map((emoji, index) => <button key={`${emoji}-${index}`} type="button" onClick={() => appendEmoji(emoji)} aria-label={`Add ${emoji}`} title={emoji} className="flex h-9 items-center justify-center rounded-lg text-xl transition hover:bg-[#f4f0e8]">{emojiCategory === "Flags" ? <img src={flagAssetUrl(emoji)} alt={emoji} loading="lazy" className="h-4 w-6 rounded-[2px] object-cover shadow-sm" /> : emoji}</button>)}</div></div>
               </div>}
             </div>
             <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf,.pdf" onChange={chooseAttachment} className="hidden" aria-label="Choose image, PDF, or video" />
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending || Boolean(editingMessageId)} aria-label="Attach image, PDF, or video" title="Attach image, PDF, or video" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#e7dfd0] bg-white text-[#6e6a7b] transition hover:bg-[#f4f0e8] hover:text-[#5947a8] disabled:cursor-not-allowed disabled:opacity-40"><Paperclip size={19}/></button>
-            <input ref={composerRef} value={draft} onChange={handleDraftChange} maxLength={2000} placeholder={editingMessageId ? "Edit your message…" : replyingTo ? `Reply to ${replyingTo.name}…` : `Message ${active.name.split(" ")[0]}…`} className="min-h-11 min-w-0 flex-1 rounded-2xl border-2 border-[#e7dfd0] bg-[#fffdf9] px-4 py-2.5 text-sm outline-none transition focus:border-[#7660dc]"/>
+            <div className="relative min-h-11 min-w-0 flex-1">
+              <div ref={composerOverlayRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 flex items-center overflow-hidden rounded-2xl border-2 border-transparent px-4 py-2.5 text-sm">
+                <MessageText text={draft || (editingMessageId ? "Edit your message…" : replyingTo ? `Reply to ${replyingTo.name}…` : `Message ${active.name.split(" ")[0]}…`)} className={`block w-max whitespace-pre ${draft ? "text-[#17182d]" : "text-[#858191]"}`} flagClassName="w-[2ch]" />
+              </div>
+              <input ref={composerRef} value={draft} onChange={handleDraftChange} onScroll={syncComposerOverlay} maxLength={2000} placeholder="" className="relative z-10 h-full min-h-11 w-full rounded-2xl border-2 border-[#e7dfd0] bg-transparent px-4 py-2.5 text-sm text-transparent caret-[#17182d] outline-none selection:bg-[#c9bcff]/50 selection:text-transparent transition focus:border-[#7660dc]" />
+            </div>
             <button type="submit" disabled={(!draft.trim() && !attachment) || sending} aria-label={editingMessageId ? "Save message" : "Send message"} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-[#191a32] bg-[#ffe35b] px-3.5 font-bold text-black shadow-[0_3px_0_#191a32] transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-50 sm:px-4">{sending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#17182d]/30 border-t-[#17182d]" /> : editingMessageId ? <Check size={17}/> : <Send size={17}/>}<span className="hidden sm:inline">{sending ? attachment ? `Uploading ${uploadProgress}%` : "Saving…" : editingMessageId ? "Save" : "Send"}</span></button>
           </div>
         </form>
