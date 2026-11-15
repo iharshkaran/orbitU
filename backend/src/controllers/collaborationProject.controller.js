@@ -1,4 +1,34 @@
-import { countPendingProjectRequests, createCollaborationProject, createProjectMilestone, createProjectTask, decideProjectRequest, deleteCollaborationProject, deleteProjectMilestone, deleteProjectTask, getCollaborationWorkspace, listCollaborationProjects, listJoinedCollaborationProjects, listMyCollaborationProjects, requestToJoinProject, updateCollaborationProject, updateProjectMilestone, updateProjectTask } from "../services/collaborationProject.service.js";
+import { addProjectResource, countPendingProjectRequests, createCollaborationProject, createProjectMilestone, createProjectTask, decideProjectInvitation, decideProjectRequest, deleteCollaborationProject, deleteProjectMilestone, deleteProjectResource, deleteProjectTask, getCollaborationWorkspace, inviteProjectTeammate, listProjectInvitations, listCollaborationProjects, listJoinedCollaborationProjects, listMyCollaborationProjects, removeProjectTeammate, requestToJoinProject, updateCollaborationProject, updateProjectMilestone, updateProjectTask } from "../services/collaborationProject.service.js";
+
+export async function getProjectInvitations(req, res) {
+  const invitations = await listProjectInvitations({ userId: req.user._id });
+  return res.json({ success: true, data: invitations });
+}
+
+export async function inviteTeammate(req, res) {
+  const result = await inviteProjectTeammate({ projectId: req.params.id, inviterId: req.user._id, inviteeId: req.params.inviteeId });
+  return res.status(201).json({ success: true, data: result });
+}
+
+export async function respondProjectInvitation(req, res) {
+  const result = await decideProjectInvitation({ projectId: req.params.id, invitationId: req.params.invitationId, userId: req.user._id, action: req.validated.action });
+  return res.json({ success: true, data: result });
+}
+
+export async function addWorkspaceResource(req, res) {
+  const workspace = await addProjectResource({ projectId: req.params.id, userId: req.user._id, data: req.validated });
+  return res.status(201).json({ success: true, data: workspace });
+}
+
+export async function removeWorkspaceResource(req, res) {
+  const workspace = await deleteProjectResource({ projectId: req.params.id, resourceId: req.params.resourceId, userId: req.user._id });
+  return res.json({ success: true, data: workspace });
+}
+
+export async function removeTeammate(req, res) {
+  const workspace = await removeProjectTeammate({ projectId: req.params.id, memberId: req.params.memberId, ownerId: req.user._id });
+  return res.json({ success: true, data: workspace });
+}
 
 export async function getPendingProjectRequestCount(req, res) {
   const count = await countPendingProjectRequests({ userId: req.user._id });

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CalendarDays, CheckCircle2, Circle, Clock3, FolderKanban, LoaderCircle, Pencil, Plus, Save, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarDays, Check, CheckCircle2, ChevronDown, Circle, Clock3, ExternalLink, FileText, FolderKanban, Link2, LoaderCircle, Pencil, Plus, Save, Search, Trash2, Upload, UserRound, Users, X } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../context/useAuth";
 import { api } from "../utils/api";
+import { uploadFileToImageKit } from "../utils/imagekitUpload";
 
 const inputClass = "w-full rounded-xl border-2 border-[#e7dfd0] bg-[#fffdf9] px-3 py-2.5 text-sm outline-none transition placeholder:text-[#858191] focus:border-[#7660dc]";
 const taskColumns = [
@@ -11,10 +12,47 @@ const taskColumns = [
   { id: "in_progress", title: "In progress", hint: "Being worked on", tone: "bg-[#eee9ff]", dot: "bg-[#6f56d9]" },
   { id: "done", title: "Done", hint: "Completed tasks", tone: "bg-[#e8f7ee]", dot: "bg-[#3b9b69]" },
 ];
-const activityActionLabels = { created: "added", updated: "updated", status_changed: "changed status for", assigned: "updated assignment for", deleted: "removed" };
+const activityActionLabels = { created: "added", updated: "updated", status_changed: "changed status for", assigned: "updated assignment for", deleted: "removed", invited: "invited", joined: "joined", declined_invite: "declined", resource_added: "shared", resource_removed: "removed" };
 
 function Avatar({ person, size = "h-9 w-9" }) {
   return <span className={`flex ${size} shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#191a32] bg-[#eee9ff] text-xs font-bold text-[#5947a8]`}>{person?.photo ? <img src={person.photo} alt="" className="h-full w-full object-cover" /> : person?.name?.slice(0, 1) || <UserRound size={15} />}</span>;
+}
+
+function ConnectionPicker({ connections, value, onChange, disabled }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const pickerRef = useRef(null);
+  const selected = connections.find((connection) => connection.studentId === value);
+  const filtered = connections.filter((connection) => `${connection.name} ${connection.role || ""}`.toLowerCase().includes(query.trim().toLowerCase()));
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function handlePointerDown(event) {
+      if (!pickerRef.current?.contains(event.target)) setOpen(false);
+    }
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  return <div ref={pickerRef} className="relative min-w-0 flex-1">
+    <button type="button" disabled={disabled} aria-haspopup="listbox" aria-expanded={open} onClick={() => { setOpen((current) => !current); setQuery(""); }} className={`${inputClass} flex min-h-11 items-center gap-2 text-left disabled:cursor-not-allowed disabled:opacity-60`}>
+      {selected ? <><Avatar person={selected} size="h-7 w-7" /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{selected.name}</span><span className="block truncate text-[10px] font-normal text-[#858191]">{selected.role || "OrbitU student"}</span></span></> : <span className="flex-1 text-sm text-[#6e6a7b]">Choose a connection</span>}
+      <ChevronDown size={16} className={`shrink-0 text-[#6e6a7b] transition-transform ${open ? "rotate-180" : ""}`} />
+    </button>
+    {open && <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-2xl border-2 border-[#191a32] bg-white shadow-[4px_5px_0_#c9bcff]">
+      <div className="border-b border-[#e7dfd0] p-2.5"><div className="relative"><Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#858191]" /><input autoFocus type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search connections…" className={`${inputClass} !min-h-9 !py-2 !pl-9 !text-xs`} /></div></div>
+      <div role="listbox" aria-label="Choose a connected student" className="max-h-64 overflow-y-auto p-1.5">
+        {filtered.length ? filtered.map((connection) => <button key={connection.studentId} type="button" role="option" aria-selected={value === connection.studentId} onClick={() => { onChange(connection.studentId); setOpen(false); setQuery(""); }} className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${value === connection.studentId ? "bg-[#eee9ff]" : "hover:bg-[#fff9e8]"}`}><Avatar person={connection} size="h-9 w-9" /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-[#17182d]">{connection.name}</span><span className="mt-0.5 block truncate text-[10px] text-[#6e6a7b]">{connection.role || "OrbitU student"}</span></span>{value === connection.studentId && <Check size={15} className="shrink-0 text-[#6f56d9]" />}</button>) : <p className="px-3 py-5 text-center text-xs text-[#858191]">No matching connections found.</p>}
+      </div>
+    </div>}
+  </div>;
 }
 
 function dateLabel(value) {
@@ -43,6 +81,7 @@ export default function ProjectWorkspace() {
   const { id } = useParams();
   const { user } = useAuth();
   const [workspace, setWorkspace] = useState(null);
+  const [connections, setConnections] = useState([]);
   const [loadedProjectId, setLoadedProjectId] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -57,6 +96,12 @@ export default function ProjectWorkspace() {
   const [editTaskForm, setEditTaskForm] = useState({ title: "", description: "", status: "backlog", assigneeId: "", milestoneId: "", dueDate: "" });
   const [milestoneForm, setMilestoneForm] = useState({ title: "", dueDate: "" });
   const [editMilestoneForm, setEditMilestoneForm] = useState({ title: "", dueDate: "", status: "upcoming" });
+  const [inviteeId, setInviteeId] = useState("");
+  const [resourceForm, setResourceForm] = useState({ title: "", url: "" });
+  const [resourceMode, setResourceMode] = useState("link");
+  const [resourceFile, setResourceFile] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [confirmRemoveMemberId, setConfirmRemoveMemberId] = useState("");
   const busyRef = useRef(false);
 
   useEffect(() => {
@@ -67,6 +112,12 @@ export default function ProjectWorkspace() {
       .finally(() => { if (active) setLoadedProjectId(id); });
     return () => { active = false; };
   }, [id]);
+
+  useEffect(() => {
+    let active = true;
+    api.connections().then((data) => { if (active) setConnections(data.connected || []); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const loading = loadedProjectId !== id;
 
@@ -151,6 +202,46 @@ export default function ProjectWorkspace() {
     if (deleted) setConfirmDeleteMilestoneId("");
   }
 
+  async function inviteTeammate(event) {
+    event.preventDefault();
+    if (!inviteeId) return;
+    const invited = await perform("invite", async () => {
+      await api.inviteProjectTeammate(id, inviteeId);
+      return api.projectWorkspace(id);
+    });
+    if (invited) { setInviteeId(""); window.dispatchEvent(new Event("connectly:backend-update")); }
+  }
+
+  async function removeTeammate(memberId) {
+    const removed = await perform(`remove-member-${memberId}`, () => api.removeProjectTeammate(id, memberId));
+    if (removed) {
+      setConfirmRemoveMemberId("");
+      window.dispatchEvent(new Event("connectly:backend-update"));
+    }
+  }
+
+  async function shareResource(event) {
+    event.preventDefault();
+    if (resourceMode === "file" && !resourceFile) { setError("Choose a file to share."); return; }
+    if (resourceMode === "file" && resourceFile.size > 50 * 1024 * 1024) { setError("Choose a file smaller than 50 MB."); return; }
+    const shared = await perform("resource", async () => {
+      let resource;
+      if (resourceMode === "file") {
+        setUploadProgress(0);
+        const uploaded = await uploadFileToImageKit(resourceFile, "/connectly/project-resources", setUploadProgress);
+        resource = { title: resourceForm.title.trim() || resourceFile.name, url: uploaded.url, type: "file", fileName: resourceFile.name, mimeType: resourceFile.type, size: resourceFile.size };
+      } else {
+        resource = { title: resourceForm.title.trim(), url: resourceForm.url.trim(), type: "link" };
+      }
+      return api.addProjectResource(id, resource);
+    });
+    if (shared) { setResourceForm({ title: "", url: "" }); setResourceFile(null); setUploadProgress(0); }
+  }
+
+  async function removeResource(resourceId) {
+    await perform(`delete-resource-${resourceId}`, () => api.removeProjectResource(id, resourceId));
+  }
+
   const project = workspace?.project;
   const members = useMemo(() => {
     if (!project) return [];
@@ -160,6 +251,10 @@ export default function ProjectWorkspace() {
   const tasks = workspace?.tasks || [];
   const milestones = workspace?.milestones || [];
   const activity = workspace?.activity || [];
+  const resources = workspace?.resources || [];
+  const invitations = workspace?.invitations || [];
+  const pendingInviteIds = new Set(invitations.filter((invitation) => invitation.status === "pending").map((invitation) => invitation.user?.id));
+  const availableConnections = connections.filter((connection) => !members.some((member) => member.id === connection.studentId) && !pendingInviteIds.has(connection.studentId));
   const completedMilestones = milestones.filter((milestone) => milestone.status === "completed").length;
 
   return <div className="min-h-screen orbit-pattern-bg text-[#17182d]"><Navbar />
@@ -187,6 +282,25 @@ export default function ProjectWorkspace() {
                 <div className="flex flex-wrap gap-2">{project.roles?.slice(0, 3).map((role) => <span key={role} className="rounded-full bg-[#fff3b7] px-2.5 py-1 text-[10px] font-bold text-[#715b00]">{role}</span>)}</div>
               </div>
             </header>
+
+            <section className="mt-6 grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+              <article className="rounded-[22px] border-2 border-[#191a32] bg-white p-4 shadow-[3px_4px_0_#ffe35b] sm:p-5">
+                <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6f56d9]">Grow the team</p><h2 className="mt-1 flex items-center gap-2 text-lg font-extrabold"><Users size={18} />Teammates</h2><p className="mt-1 text-xs text-[#6e6a7b]">Invite students you’re already connected with.</p></div><span className="rounded-full bg-[#eee9ff] px-2.5 py-1 text-xs font-bold text-[#5947a8]">{members.length}/{project.teamSize}</span></div>
+                {project.status === "full" || members.length >= project.teamSize ? <p className="mt-4 rounded-xl bg-[#fff9e8] p-3 text-xs text-[#715b00]">Your team is full. Increase team size to invite someone.</p> : availableConnections.length ? <form onSubmit={inviteTeammate} className="mt-4 flex flex-col gap-2 sm:flex-row"><ConnectionPicker connections={availableConnections} value={inviteeId} onChange={setInviteeId} disabled={Boolean(busy)} /><button type="submit" disabled={!inviteeId || Boolean(busy)} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-[#191a32] bg-[#ffe35b] px-4 py-2 text-xs font-bold shadow-[0_2px_0_#191a32] disabled:opacity-50">{busy === "invite" ? <LoaderCircle size={14} className="animate-spin" /> : <Plus size={14} />}Invite</button></form> : <p className="mt-4 rounded-xl bg-[#fffdf9] p-3 text-xs text-[#858191]">No connections available to invite yet.</p>}
+                <div className="mt-4 border-t border-[#e7dfd0] pt-3"><p className="text-[10px] font-bold uppercase tracking-wide text-[#858191]">Current team</p><div className="mt-2 space-y-2">{members.map((member) => <div key={member.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-[#fffdf9] px-3 py-2"><Avatar person={member} size="h-8 w-8" /><span className="min-w-0 flex-1 truncate text-xs font-semibold">{member.name}{member.id === project.owner?.id ? <span className="ml-1 font-normal text-[#858191]">· Owner</span> : ""}</span>{project.isOwner && member.id !== project.owner?.id && (confirmRemoveMemberId === member.id ? <span className="flex items-center gap-1.5"><span className="text-[10px] font-semibold text-[#a33b48]">Remove teammate?</span><button type="button" disabled={Boolean(busy)} onClick={() => removeTeammate(member.id)} className="min-h-9 rounded-lg bg-[#fff1f1] px-2.5 text-[10px] font-bold text-[#a33b48] disabled:opacity-50">{busy === `remove-member-${member.id}` ? "Removing…" : "Confirm"}</button><button type="button" disabled={Boolean(busy)} onClick={() => setConfirmRemoveMemberId("")} className="min-h-9 rounded-lg border border-[#e7dfd0] px-2.5 text-[10px] font-semibold">Cancel</button></span> : <button type="button" disabled={Boolean(busy)} onClick={() => setConfirmRemoveMemberId(member.id)} className="min-h-9 rounded-lg border border-[#f0d4d4] px-2.5 text-[10px] font-semibold text-[#a33b48] hover:bg-[#fff1f1] disabled:opacity-50">Remove</button>)}</div>)}</div></div>
+                {invitations.some((invitation) => invitation.status === "pending") && <div className="mt-4 border-t border-[#e7dfd0] pt-3"><p className="text-[10px] font-bold uppercase tracking-wide text-[#858191]">Pending invites</p><div className="mt-2 space-y-2">{invitations.filter((invitation) => invitation.status === "pending").map((invitation) => <div key={invitation.id} className="flex items-center gap-2 rounded-xl bg-[#fffdf9] px-3 py-2"><Avatar person={invitation.user} size="h-8 w-8" /><span className="min-w-0 flex-1 truncate text-xs font-semibold">{invitation.user?.name || "Student"}</span><span className="rounded-full bg-[#fff3b7] px-2 py-1 text-[10px] font-bold text-[#715b00]">Awaiting</span></div>)}</div></div>}
+              </article>
+
+              <article className="rounded-[22px] border-2 border-[#191a32] bg-white p-4 shadow-[3px_4px_0_#87d4f4] sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6f56d9]">One shared place</p><h2 className="mt-1 flex items-center gap-2 text-lg font-extrabold"><FolderKanban size={18} />Project resources</h2><p className="mt-1 text-xs text-[#6e6a7b]">Share files, references, and useful links with the team.</p></div><span className="rounded-full bg-[#e8f7ee] px-2.5 py-1 text-xs font-bold text-[#28734d]">{resources.length} shared</span></div>
+                <form onSubmit={shareResource} className="mt-4 rounded-2xl border border-[#e7dfd0] bg-[#fffdf9] p-3">
+                  <div role="group" aria-label="Resource type" className="mb-3 inline-flex rounded-xl border border-[#e7dfd0] bg-white p-1"><button type="button" aria-pressed={resourceMode === "link"} onClick={() => setResourceMode("link")} className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold ${resourceMode === "link" ? "bg-[#eee9ff] text-[#5947a8]" : "text-[#6e6a7b]"}`}><Link2 size={14} />Link</button><button type="button" aria-pressed={resourceMode === "file"} onClick={() => setResourceMode("file")} className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold ${resourceMode === "file" ? "bg-[#eee9ff] text-[#5947a8]" : "text-[#6e6a7b]"}`}><Upload size={14} />File</button></div>
+                  <div className="grid gap-2 sm:grid-cols-[1fr_1.2fr_auto] sm:items-end"><label className="text-[11px] font-semibold">Resource title<input value={resourceForm.title} onChange={(event) => setResourceForm((current) => ({ ...current, title: event.target.value }))} required={resourceMode === "link"} maxLength={100} placeholder={resourceMode === "file" ? "Optional label" : "e.g. Design reference"} className={`${inputClass} mt-1`} /></label>{resourceMode === "link" ? <label className="text-[11px] font-semibold">Link<input type="url" required value={resourceForm.url} onChange={(event) => setResourceForm((current) => ({ ...current, url: event.target.value }))} maxLength={2200} placeholder="https://…" className={`${inputClass} mt-1`} /></label> : <label className="text-[11px] font-semibold">Choose file<input type="file" accept="application/pdf,image/*,video/*,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip" onChange={(event) => setResourceFile(event.target.files?.[0] || null)} className="mt-1 block min-h-11 w-full rounded-xl border-2 border-[#e7dfd0] bg-white px-2 py-2 text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-[#eee9ff] file:px-2 file:py-1 file:text-xs file:font-bold" /></label>}<button type="submit" disabled={Boolean(busy) || (resourceMode === "file" && !resourceFile)} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border-2 border-[#191a32] bg-[#ffe35b] px-3.5 py-2 text-xs font-bold shadow-[0_2px_0_#191a32] disabled:opacity-50">{busy === "resource" ? <LoaderCircle size={14} className="animate-spin" /> : <Plus size={14} />}{busy === "resource" ? resourceMode === "file" && uploadProgress ? `Uploading ${uploadProgress}%` : "Sharing…" : "Share"}</button></div>
+                  <p className="mt-2 text-[10px] text-[#858191]">Files up to 50 MB. Shared files are available to project teammates.</p>
+                </form>
+                {resources.length ? <ul className="mt-3 divide-y divide-[#f0eade]">{resources.map((resource) => <li key={resource.id} className="flex items-center gap-3 py-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eee9ff] text-[#6f56d9]">{resource.type === "file" ? <FileText size={18} /> : <Link2 size={18} />}</span><div className="min-w-0 flex-1"><a href={resource.url} target="_blank" rel="noreferrer" className="block truncate text-sm font-bold text-[#17182d] hover:text-[#5947a8]">{resource.title}</a><p className="mt-0.5 truncate text-[10px] text-[#858191]">{resource.fileName || resource.url}{resource.size ? ` · ${(resource.size / (1024 * 1024)).toFixed(1)} MB` : ""}{resource.addedBy?.name ? ` · by ${resource.addedBy.name}` : ""}</p></div><a href={resource.url} target="_blank" rel="noreferrer" aria-label={`Open ${resource.title}`} className="rounded-lg border border-[#e7dfd0] p-2 text-[#6f56d9] hover:bg-[#fff9e8]"><ExternalLink size={15} /></a><button type="button" disabled={Boolean(busy)} onClick={() => removeResource(resource.id)} aria-label={`Remove ${resource.title}`} className="rounded-lg border border-[#f0d4d4] p-2 text-[#a33b48] hover:bg-[#fff1f1] disabled:opacity-50"><Trash2 size={15} /></button></li>)}</ul> : <div className="mt-3 rounded-xl border border-dashed border-[#e7dfd0] p-4 text-center text-xs text-[#858191]">No shared resources yet. Add the first link or file above.</div>}
+              </article>
+            </section>
 
             <section className="mt-8">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6f56d9]">Plan the work</p><h2 className="mt-1 text-xl font-extrabold">Milestones</h2><p className="mt-1 text-xs text-[#6e6a7b]">Break the project into goals your team can track.</p></div><button type="button" onClick={() => setShowMilestoneForm((open) => !open)} className="inline-flex items-center gap-1.5 rounded-xl border-2 border-[#191a32] bg-white px-3.5 py-2 text-xs font-bold shadow-[0_2px_0_#c9bcff]">{showMilestoneForm ? <X size={15} /> : <Plus size={15} />}{showMilestoneForm ? "Close" : "Add milestone"}</button></div>

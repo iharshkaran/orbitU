@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getInbox, getThread, sendMessage } from "../controllers/message.controller.js";
+import { getInbox, getThread, sendMessage, streamMessageEvents } from "../controllers/message.controller.js";
 import { asyncHandler } from "../middleware/async.middleware.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { validate, validateParams } from "../middleware/validate.middleware.js";
@@ -7,6 +7,7 @@ import { messageSchema, messageUserParamsSchema } from "../validators/message.va
 
 const router = Router();
 router.use(requireAuth);
+router.get("/events", streamMessageEvents);
 router.get("/", asyncHandler(getInbox));
 router.get("/:userId", validateParams(messageUserParamsSchema), asyncHandler(getThread));
 router.post("/:userId", validateParams(messageUserParamsSchema), validate(messageSchema), asyncHandler(sendMessage));

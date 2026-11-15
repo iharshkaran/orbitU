@@ -23,7 +23,7 @@ OrbitU is a student-focused professional community for sharing work, building a 
 
 ## Features
 
-- **Accounts:** register, log in, keep a session, and log out.
+- **Accounts:** verify email with a one-time signup code, register, log in, keep a secure cookie session, log out, and reset a forgotten password through a one-time Brevo email link.
 - **Student profiles:** headline, course, year, university, location, bio, skills, profile photo, banner, portfolio link, education, projects, and featured items.
 - **Feed:** publish and edit text updates, categorized posts, images, videos, and PDF documents; like and comment on posts; open an individual post; and delete your own posts.
 - **Explore:** search student profiles and browse paginated results by course and skills.

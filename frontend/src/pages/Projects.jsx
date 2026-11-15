@@ -60,6 +60,7 @@ export default function Projects() {
   const [projects, setProjects] = useState([]);
   const [myProjects, setMyProjects] = useState([]);
   const [joinedProjects, setJoinedProjects] = useState([]);
+  const [projectInvitations, setProjectInvitations] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -74,17 +75,18 @@ export default function Projects() {
   const actionLocks = useRef(new Set());
 
   const loadProjects = useCallback(async (query = search) => {
-    const [openProjects, ownedProjects, joined] = await Promise.all([api.collaborationProjects(query), api.myCollaborationProjects(), api.joinedCollaborationProjects()]);
+    const [openProjects, ownedProjects, joined, invitations] = await Promise.all([api.collaborationProjects(query), api.myCollaborationProjects(), api.joinedCollaborationProjects(), api.projectInvitations()]);
     setProjects(openProjects);
     setMyProjects(ownedProjects);
     setJoinedProjects(joined);
+    setProjectInvitations(invitations);
   }, [search]);
 
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
-      Promise.all([api.collaborationProjects(search), api.myCollaborationProjects(), api.joinedCollaborationProjects()])
-        .then(([openProjects, ownedProjects, joined]) => { if (active) { setProjects(openProjects); setMyProjects(ownedProjects); setJoinedProjects(joined); setError(""); } })
+      Promise.all([api.collaborationProjects(search), api.myCollaborationProjects(), api.joinedCollaborationProjects(), api.projectInvitations()])
+        .then(([openProjects, ownedProjects, joined, invitations]) => { if (active) { setProjects(openProjects); setMyProjects(ownedProjects); setJoinedProjects(joined); setProjectInvitations(invitations); setError(""); } })
         .catch((requestError) => { if (active) setError(requestError.message); })
         .finally(() => { if (active) setLoading(false); });
     }, search ? 250 : 0);
@@ -124,6 +126,19 @@ export default function Projects() {
     setBusyKey(key); setError(""); setSuccess("");
     try { await api.decideProjectRequest(projectId, requestId, action); window.dispatchEvent(new Event("connectly:backend-update")); await loadProjects(); setSuccess(action === "accept" ? "Student added to your project team." : "Request declined."); }
     catch (requestError) { setError(requestError.message); }
+    finally { actionLocks.current.delete(key); setBusyKey(""); }
+  }
+
+  async function decideInvitation(invitation, action) {
+    const key = `invitation-${invitation.id}`;
+    if (actionLocks.current.has(key)) return;
+    actionLocks.current.add(key); setBusyKey(key); setError(""); setSuccess("");
+    try {
+      await api.decideProjectInvitation(invitation.projectId, invitation.id, action);
+      await loadProjects();
+      window.dispatchEvent(new Event("connectly:backend-update"));
+      setSuccess(action === "accept" ? `You joined “${invitation.title}”. Open your workspace below.` : `Invitation to “${invitation.title}” declined.`);
+    } catch (requestError) { setError(requestError.message); }
     finally { actionLocks.current.delete(key); setBusyKey(""); }
   }
 
@@ -199,6 +214,8 @@ export default function Projects() {
       <section className="mb-6 rounded-[20px] border-2 border-[#191a32] bg-white p-3 shadow-[3px_4px_0_#c9bcff] sm:p-4"><div className="relative"><Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#858191]" /><input type="search" value={search} onChange={(event) => { setLoading(true); setSearch(event.target.value); }} placeholder="Search projects, skills or roles…" style={{ paddingLeft: "2.75rem" }} className={fieldClass} /></div></section>
 
       {pendingRequestCount > 0 && <a href="#your-projects" className="mb-7 flex items-center justify-between gap-3 rounded-2xl border-2 border-[#191a32] bg-[#fff3b7] px-4 py-3 shadow-[2px_3px_0_#191a32] transition hover:-translate-y-0.5 sm:px-5"><span className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#e9d56a] bg-white text-[#6f56d9]"><Users size={17} /></span><span className="min-w-0"><span className="block truncate text-sm font-extrabold">Your team needs you</span><span className="mt-0.5 block truncate text-xs text-[#6e6a7b]">{pendingRequestCount} new {pendingRequestCount === 1 ? "student wants" : "students want"} to join your project</span></span></span><span className="shrink-0 rounded-lg border border-[#191a32] bg-white px-3 py-2 text-xs font-bold">Review</span></a>}
+
+      {projectInvitations.length > 0 && <section className="mb-8 rounded-[22px] border-2 border-[#191a32] bg-white p-4 shadow-[3px_4px_0_#ffe35b] sm:p-5"><div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6f56d9]">You’re invited</p><h2 className="mt-1 text-lg font-extrabold">Project invitations</h2></div><span className="rounded-full bg-[#fff3b7] px-3 py-1.5 text-xs font-bold text-[#715b00]">{projectInvitations.length} pending</span></div><div className="grid gap-3 md:grid-cols-2">{projectInvitations.map((invitation) => <article key={invitation.id} className="rounded-2xl border border-[#e7dfd0] bg-[#fffdf9] p-4"><div className="flex items-start gap-3"><ProfileAvatar person={invitation.invitedBy || invitation.owner} /><div className="min-w-0 flex-1"><h3 className="truncate font-extrabold">{invitation.title}</h3><p className="mt-1 text-xs text-[#6e6a7b]">Invited by {invitation.invitedBy?.name || invitation.owner?.name || "A student"}{invitation.invitedBy?.university ? ` · ${invitation.invitedBy.university}` : ""}</p></div><span className="rounded-full bg-[#eee9ff] px-2 py-1 text-[10px] font-bold text-[#5947a8]">Invite</span></div><p className="mt-3 line-clamp-2 text-xs leading-5 text-[#514e62]">{invitation.description}</p><div className="mt-4 flex justify-end gap-2"><button type="button" disabled={Boolean(busyKey)} onClick={() => decideInvitation(invitation, "decline")} className="min-h-10 rounded-xl border border-[#e7dfd0] px-3 py-2 text-xs font-semibold disabled:opacity-50">Decline</button><button type="button" disabled={Boolean(busyKey)} onClick={() => decideInvitation(invitation, "accept")} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border-2 border-[#191a32] bg-[#ffe35b] px-3 py-2 text-xs font-bold shadow-[0_2px_0_#191a32] disabled:opacity-50">{busyKey === `invitation-${invitation.id}` ? <LoaderCircle size={14} className="animate-spin" /> : <Check size={14} />}Accept invitation</button></div></article>)}</div></section>}
 
       <section><div className="mb-4 flex items-end justify-between gap-3"><div><h2 className="text-xl font-extrabold">Open opportunities</h2><p className="mt-1 text-xs text-[#6e6a7b]">Projects recruiting teammates right now.</p></div><span className="text-xs text-[#858191]">{loading ? "Loading…" : `${discoverProjects.length} projects`}</span></div>
         {loading ? <div role="status" className="rounded-[24px] border-2 border-[#191a32] bg-white p-10 text-center text-sm text-[#6e6a7b]"><LoaderCircle size={22} className="mx-auto animate-spin text-[#6f56d9]" /><span className="mt-2 block">Finding student projects…</span></div>

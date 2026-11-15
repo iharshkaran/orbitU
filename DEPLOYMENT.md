@@ -17,7 +17,13 @@ Set these environment values in Render:
 - `JWT_SECRET`: a private random value of at least 24 characters. Render generates one in the Blueprint.
 - `IMAGEKIT_PUBLIC_KEY` and `IMAGEKIT_PRIVATE_KEY`: your ImageKit keys.
 - `CLIENT_URL`: the exact Vercel production origin, for example `https://orbitu.vercel.app` (no trailing slash). Multiple allowed origins can be comma-separated.
+- `FRONTEND_URL`: the exact public frontend origin used to create password-reset links, for example `https://orbitu.vercel.app` (no trailing slash).
+- `BREVO_API_KEY`: a Brevo API key. Keep it only in Render's environment settings; never put it in frontend variables or commit it.
+- `BREVO_SENDER_EMAIL`: a sender address verified in Brevo. If this is omitted, the backend also accepts `EMAIL_USER` as the sender address.
+- `BREVO_SENDER_NAME`: optional display name for reset emails (defaults to `OrbitU`).
 - `COOKIE_SAME_SITE`: keep `lax` when using the Vercel same-origin API rewrite.
+
+In Brevo, enable transactional emails and verify the sender address before testing password reset. The backend sends the reset email through Brevo's transactional email API. [Brevo setup and API details](https://developers.brevo.com/docs/send-a-transactional-email).
 
 Copy the deployed API service URL, such as `https://orbitu-api.onrender.com`.
 
@@ -36,5 +42,7 @@ Run `npm run dev` in `backend` and `npm run dev` in `frontend`. Vite proxies `/a
 ## Before sharing the public app
 
 - Check `/api/health` on the Render service and confirm the database reports `connected`.
+- Request a password reset for an account you control; confirm the email arrives, the link expires after 30 minutes, it works only once, and the old password no longer works.
+- Create a new account; confirm the 6-digit email code arrives, expires after 10 minutes, and signup is rejected until the code is verified.
 - Verify signup, login, logout, post creation, media upload, connection requests, and messaging on the deployed Vercel URL.
 - Keep `.env` files and private ImageKit/MongoDB credentials out of Git. The `.env.example` files contain placeholders only.

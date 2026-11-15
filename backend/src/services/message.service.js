@@ -3,6 +3,7 @@ import Follow from "../models/Follow.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 import { httpError } from "../utils/httpError.js";
+import { publishMessageEvent } from "./messageEvents.service.js";
 
 const userFields = "name headline course year university photo";
 
@@ -56,7 +57,9 @@ export async function listMessageInbox(userId) {
 export async function listMessageThread({ userId, otherUserId }) {
   await ensureConnected(userId, otherUserId);
   const filter = { $or: [{ sender: userId, recipient: otherUserId }, { sender: otherUserId, recipient: userId }] };
-  await Message.updateMany({ sender: otherUserId, recipient: userId, readAt: null }, { $set: { readAt: new Date() } });
+  const readAt = new Date();
+  const readResult = await Message.updateMany({ sender: otherUserId, recipient: userId, readAt: null }, { $set: { readAt } });
+  if (readResult.modifiedCount > 0) publishMessageEvent(otherUserId, "read", { conversationId: String(userId), readAt });
   const messages = await Message.find(filter).sort({ createdAt: 1 }).limit(300).populate("sender", "name photo").lean();
   return messages.map((message) => formatMessage(message, userId));
 }
@@ -64,5 +67,11 @@ export async function listMessageThread({ userId, otherUserId }) {
 export async function createMessage({ user, otherUserId, text }) {
   await ensureConnected(user._id, otherUserId);
   const message = await Message.create({ sender: user._id, recipient: otherUserId, text });
-  return formatMessage({ ...message.toObject(), sender: { _id: user._id } }, user._id);
+  const messageData = message.toObject();
+  const senderView = formatMessage({ ...messageData, sender: { _id: user._id } }, user._id);
+  const recipientView = formatMessage({ ...messageData, sender: { _id: user._id } }, otherUserId);
+  const senderProfile = { id: String(user._id), name: user.name || "Student", photo: user.photo || "" };
+  publishMessageEvent(user._id, "message", { conversationId: String(otherUserId), message: senderView, sender: senderProfile });
+  publishMessageEvent(otherUserId, "message", { conversationId: String(user._id), message: recipientView, sender: senderProfile });
+  return senderView;
 }

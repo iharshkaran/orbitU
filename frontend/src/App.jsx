@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AuthPage from "./pages/AuthPage";
+import PasswordResetPage from "./pages/PasswordResetPage";
 import Home from "./pages/Home";
 import Profile from "./pages/Profile";
 import PublicProfile from "./pages/PublicProfile";
@@ -34,6 +35,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={loading ? <SessionLoading /> : user ? <Navigate to="/home" replace /> : <AuthPage />} />
+      <Route path="/forgot-password" element={<PasswordResetPage />} />
+      <Route path="/reset-password" element={<PasswordResetPage reset />} />
       <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
       <Route path="/create-post" element={<ProtectedRoute><CreatePost /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

@@ -9,17 +9,18 @@ export function AuthProvider({ children }) {
 
   const setUser = useCallback((nextUser) => {
     setUserState(nextUser);
-    if (nextUser) {
-      localStorage.setItem("connectly-profile", JSON.stringify(nextUser));
-      localStorage.setItem("connectly-demo-session", JSON.stringify({ name: nextUser.name, email: nextUser.email }));
-    } else {
-      localStorage.removeItem("connectly-profile");
-      localStorage.removeItem("connectly-demo-session");
-    }
   }, []);
 
   useEffect(() => {
     let active = true;
+    // Older builds cached profile details in localStorage. The HTTP-only session
+    // cookie is now the only persisted authentication state.
+    try {
+      localStorage.removeItem("connectly-profile");
+      localStorage.removeItem("connectly-demo-session");
+    } catch {
+      // Authentication still works from the HTTP-only cookie if storage is blocked.
+    }
     api.me()
       .then(({ user: currentUser }) => { if (active) setUser(currentUser); })
       .catch(() => { if (active) setUser(null); })

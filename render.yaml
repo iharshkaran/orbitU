@@ -13,6 +13,14 @@ services:
         value: https://your-orbitu-app.vercel.app
       - key: COOKIE_SAME_SITE
         value: lax
+      - key: FRONTEND_URL
+        value: https://your-orbitu-app.vercel.app
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: OrbitU
       - key: JWT_SECRET
         generateValue: true
       - key: MONGODB_URI

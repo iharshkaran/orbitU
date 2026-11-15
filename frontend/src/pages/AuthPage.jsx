@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../utils/api";
 import { useAuth } from "../context/useAuth";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
     GraduationCap,
     Eye,
@@ -60,9 +60,10 @@ const popularSkills = [
 
 function AuthPage() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const { user, setUser } = useAuth();
     useEffect(() => { if (user) navigate("/home", { replace: true }); }, [user, navigate]);
-    const [mode, setMode] = useState("login");
+    const [mode, setMode] = useState(() => searchParams.get("mode") === "signup" ? "signup" : "login");
     const [step, setStep] = useState("auth");
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -71,6 +72,8 @@ function AuthPage() {
     const [remember, setRemember] = useState(true);
     const [busy, setBusy] = useState(false);
     const [selectedSkills, setSelectedSkills] = useState([]);
+    const [verificationCode, setVerificationCode] = useState("");
+    const [skipSelectedSkills, setSkipSelectedSkills] = useState(false);
 
     const [form, setForm] = useState({
         name: "",
@@ -102,6 +105,7 @@ function AuthPage() {
         setNotice("");
         setShowPassword(false);
         setShowConfirmPassword(false);
+        setVerificationCode("");
     }
 
     function validateEmail(email) {
@@ -174,15 +178,65 @@ function AuthPage() {
         };
         setBusy(true);
         try {
-            const result = await api.register({ name: profile.name, email: form.email.trim(), password: form.password, university: profile.university, course: profile.course, year: profile.year, bio: profile.bio, skills: skip ? [] : selectedSkills });
+            await api.sendSignupCode({ email: form.email.trim(), name: profile.name });
+            setSkipSelectedSkills(skip);
+            setVerificationCode("");
+            setNotice("");
+            setStep("verify");
+        } catch (requestError) { setError(requestError.message); }
+        finally { setBusy(false); }
+    }
+
+    async function verifySignupCode(event) {
+        event.preventDefault();
+        setError("");
+        setNotice("");
+        if (!/^\d{6}$/.test(verificationCode)) {
+            setError("Enter the 6-digit code from your email.");
+            return;
+        }
+
+        const profile = {
+            name: form.name.trim(),
+            university: form.university.trim(),
+            course: form.course,
+            year: form.year,
+            bio: form.bio.trim(),
+        };
+        setBusy(true);
+        try {
+            const { verificationToken } = await api.verifySignupCode({ email: form.email.trim(), code: verificationCode });
+            const result = await api.register({
+                name: profile.name,
+                email: form.email.trim(),
+                password: form.password,
+                university: profile.university,
+                course: profile.course,
+                year: profile.year,
+                bio: profile.bio,
+                skills: skipSelectedSkills ? [] : selectedSkills,
+                verificationToken,
+            });
             setUser(result.user);
             navigate("/home");
-        } catch (requestError) { setError(requestError.message); setStep("auth"); }
+        } catch (requestError) { setError(requestError.message); }
+        finally { setBusy(false); }
+    }
+
+    async function resendSignupCode() {
+        setError("");
+        setNotice("");
+        setBusy(true);
+        try {
+            await api.sendSignupCode({ email: form.email.trim(), name: form.name.trim() });
+            setNotice("A fresh verification code has been sent to your email.");
+        } catch (requestError) { setError(requestError.message); }
         finally { setBusy(false); }
     }
 
     function returnToAuth() {
         setStep("auth");
+        setVerificationCode("");
         setError("");
         setNotice("");
     }
@@ -278,7 +332,7 @@ function AuthPage() {
                             <div>
                                 <div className="mb-2 flex items-center justify-between gap-3">
                                     <label htmlFor="password" className="text-sm font-bold text-[#25243a]">Password</label>
-                                    <button type="button" onClick={() => setNotice("Password recovery will be available when authentication is implemented.")} className="text-xs font-bold text-[#6f56d9] hover:text-[#4e3ba8]">Forgot password?</button>
+                                    <button type="button" onClick={() => navigate(`/forgot-password${form.email.trim() ? `?email=${encodeURIComponent(form.email.trim())}` : ""}`)} className="text-xs font-bold text-[#6f56d9] hover:text-[#4e3ba8]">Forgot password?</button>
                                 </div>
                                 <div className="relative">
                                     <input id="password" type={showPassword ? "text" : "password"} name="password" value={form.password} onChange={updateField} placeholder="Enter your password" autoComplete="current-password" className="w-full rounded-xl border-2 border-[#e6e2dc] bg-[#fffdf9] px-4 py-3.5 pr-12 text-sm text-[#191a32] outline-none transition placeholder:text-[#aaa6b1] focus:border-[#7660dc] focus:ring-4 focus:ring-[#7660dc]/10" required />
@@ -311,6 +365,7 @@ function AuthPage() {
 
     if (mode === "signup") {
         const profileStep = step === "profile";
+        const verificationStep = step === "verify";
         const registerInputClass = `${inputClass} rounded-2xl border-2 px-4 py-3.5`;
 
         return (
@@ -380,14 +435,15 @@ function AuthPage() {
                         <div className="mb-6 flex items-center justify-between gap-3">
                             <div>
                                 <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#6f56d9]">JOIN THE COMMUNITY</p>
-                                <h2 id="register-heading" className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{profileStep ? "Build your profile." : "Create your orbit."}</h2>
+                                <h2 id="register-heading" className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{verificationStep ? "Verify your email." : profileStep ? "Build your profile." : "Create your orbit."}</h2>
                             </div>
-                            <span className="shrink-0 rounded-full bg-[#eee9ff] px-3 py-1.5 text-xs font-bold text-[#5947a8]">Step {profileStep ? "2" : "1"} of 2</span>
+                            <span className="shrink-0 rounded-full bg-[#eee9ff] px-3 py-1.5 text-xs font-bold text-[#5947a8]">Step {verificationStep ? "3" : profileStep ? "2" : "1"} of 3</span>
                         </div>
 
-                        <div className="mb-6 grid grid-cols-2 gap-2" aria-label="Registration progress">
-                            <div className={`rounded-xl px-3 py-2.5 text-xs font-bold ${profileStep ? "bg-[#e9f7ef] text-[#28734d]" : "bg-[#eee9ff] text-[#5947a8]"}`}><span className="mr-2">{profileStep ? "✓" : "01"}</span>Account</div>
-                            <div className={`rounded-xl px-3 py-2.5 text-xs font-bold ${profileStep ? "bg-[#eee9ff] text-[#5947a8]" : "bg-[#f4f0e8] text-[#858191]"}`}><span className="mr-2">02</span>Your campus</div>
+                        <div className="mb-6 grid grid-cols-3 gap-2" aria-label="Registration progress">
+                            <div className={`rounded-xl px-2 py-2.5 text-xs font-bold ${step !== "auth" ? "bg-[#e9f7ef] text-[#28734d]" : "bg-[#eee9ff] text-[#5947a8]"}`}><span className="mr-1 sm:mr-2">{step !== "auth" ? "✓" : "01"}</span>Account</div>
+                            <div className={`rounded-xl px-2 py-2.5 text-xs font-bold ${verificationStep ? "bg-[#e9f7ef] text-[#28734d]" : profileStep ? "bg-[#eee9ff] text-[#5947a8]" : "bg-[#f4f0e8] text-[#858191]"}`}><span className="mr-1 sm:mr-2">{verificationStep ? "✓" : "02"}</span>Profile</div>
+                            <div className={`rounded-xl px-2 py-2.5 text-xs font-bold ${verificationStep ? "bg-[#eee9ff] text-[#5947a8]" : "bg-[#f4f0e8] text-[#858191]"}`}><span className="mr-1 sm:mr-2">03</span>Verify</div>
                         </div>
 
                         {step === "auth" ? (
@@ -424,7 +480,7 @@ function AuthPage() {
                                 <p className="mt-5 text-center text-xs leading-5 text-[#9995a3]">By continuing, you agree to OrbitU's Terms of Service and Privacy Policy.</p>
                                 <p className="mt-5 text-center text-sm text-[#777386]">Already have an account? <button type="button" onClick={() => changeMode("login")} className="font-extrabold text-[#6f56d9] hover:text-[#4e3ba8]">Log in</button></p>
                             </>
-                        ) : (
+                        ) : step === "profile" ? (
                             <>
                                 <button type="button" onClick={returnToAuth} className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-[#6f56d9] hover:text-[#4e3ba8]"><ArrowLeft size={16} /> Back to account details</button>
                                 <p className="mb-5 text-sm leading-6 text-[#777386]">These details are optional. They help classmates find you and your interests.</p>
@@ -443,9 +499,22 @@ function AuthPage() {
                                         <div className="flex flex-wrap gap-2">{popularSkills.map((skill) => { const selected = selectedSkills.includes(skill); return <button key={skill} type="button" onClick={() => toggleSkill(skill)} className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${selected ? "border-[#d9cffb] bg-[#eee9ff] text-[#5947a8]" : "border-[#e7dfd0] bg-[#fffdf9] text-[#6e6a7b] hover:border-[#cfc7df] hover:text-[#17182d]"}`}>{selected ? "✓ " : "+ "}{skill}</button>; })}</div>
                                     </div>
                                     {error && <p role="alert" className="rounded-xl border border-[#f0b6bd] bg-[#fff0f1] p-3 text-sm text-[#a33b48]">{error}</p>}
-                                    <button type="submit" disabled={busy} className="group flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#191a32] bg-[#191a32] py-3.5 font-bold text-white shadow-[0_4px_0_#c9bcff] transition hover:-translate-y-0.5 hover:shadow-[0_6px_0_#c9bcff] disabled:cursor-wait disabled:opacity-60">{busy ? "Creating your account…" : "Create my OrbitU account"}<ArrowRight size={18} className="transition group-hover:translate-x-1" /></button>
-                                    <button type="button" onClick={() => finishProfile(true)} disabled={busy} className="w-full rounded-xl border-2 border-[#e7dfd0] bg-white py-3 text-sm font-semibold text-[#514e62] transition hover:border-[#cfc7df] hover:bg-[#f4f0e8] disabled:opacity-50">{busy ? "Creating your account…" : "Skip for now"}</button>
+                                    <button type="submit" disabled={busy} className="group flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#191a32] bg-[#191a32] py-3.5 font-bold text-white shadow-[0_4px_0_#c9bcff] transition hover:-translate-y-0.5 hover:shadow-[0_6px_0_#c9bcff] disabled:cursor-wait disabled:opacity-60">{busy ? "Sending verification code…" : "Continue to email verification"}<ArrowRight size={18} className="transition group-hover:translate-x-1" /></button>
+                                    <button type="button" onClick={() => finishProfile(true)} disabled={busy} className="w-full rounded-xl border-2 border-[#e7dfd0] bg-white py-3 text-sm font-semibold text-[#514e62] transition hover:border-[#cfc7df] hover:bg-[#f4f0e8] disabled:opacity-50">{busy ? "Sending verification code…" : "Skip profile details"}</button>
                                 </form>
+                            </>
+                        ) : (
+                            <>
+                                <button type="button" onClick={() => { setStep("profile"); setError(""); setNotice(""); }} className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-[#6f56d9] hover:text-[#4e3ba8]"><ArrowLeft size={16} /> Back to profile</button>
+                                <p className="mb-5 text-sm leading-6 text-[#777386]">We sent a 6-digit code to <strong className="text-[#17182d]">{form.email.trim()}</strong>. It expires in 10 minutes.</p>
+                                <form onSubmit={verifySignupCode} className="space-y-4">
+                                    <label className="block text-sm font-bold text-[#25243a]" htmlFor="signupVerificationCode">Email verification code</label>
+                                    <input id="signupVerificationCode" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" className={`${registerInputClass} text-center text-2xl font-bold tracking-[0.4em]`} required />
+                                    {error && <p role="alert" className="rounded-xl border border-[#f0b6bd] bg-[#fff0f1] p-3 text-sm text-[#a33b48]">{error}</p>}
+                                    {notice && <p role="status" className="rounded-xl border border-[#d9cffb] bg-[#f5f1ff] p-3 text-sm text-[#5947a8]">{notice}</p>}
+                                    <button type="submit" disabled={busy || verificationCode.length !== 6} className="group flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#191a32] bg-[#191a32] py-3.5 font-bold text-white shadow-[0_4px_0_#c9bcff] transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-60">{busy ? "Verifying email…" : "Verify email and create account"}<ArrowRight size={18} /></button>
+                                </form>
+                                <button type="button" onClick={resendSignupCode} disabled={busy} className="mt-4 w-full rounded-xl border-2 border-[#e7dfd0] bg-white py-3 text-sm font-semibold text-[#514e62] transition hover:border-[#cfc7df] disabled:opacity-50">{busy ? "Please wait…" : "Resend verification code"}</button>
                             </>
                         )}
                     </section>
@@ -643,11 +712,7 @@ function AuthPage() {
                                             {mode === "login" && (
                                                 <button
                                                     type="button"
-                                                    onClick={() =>
-                                                        setNotice(
-                                                            "Password recovery will be available when authentication is implemented."
-                                                        )
-                                                    }
+                                                    onClick={() => navigate(`/forgot-password${form.email.trim() ? `?email=${encodeURIComponent(form.email.trim())}` : ""}`)}
                                                     className="text-xs font-medium text-[#6f56d9] hover:text-[#5947a8]"
                                                 >
                                                     Forgot password?

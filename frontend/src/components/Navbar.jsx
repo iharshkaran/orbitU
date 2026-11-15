@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useConnectlyStore } from "../store/useConnectlyStore";
 import { api } from "../utils/api";
+import { subscribeMessageEvents } from "../utils/messageEvents";
 import { useAuth } from "../context/useAuth";
 
 const navItems = [
@@ -63,10 +64,10 @@ export default function Navbar() {
     let previousUnreadMessages = 0;
     let previousProjectUpdates = 0;
     let toastTimer;
-    const refreshUnread = async () => {
+    const refreshUnread = async (forceInbox = false) => {
       try {
         const store = useConnectlyStore.getState();
-        const [notifications, network, inbox, projectRequestCount] = await Promise.all([store.loadNotifications(), store.loadConnections(), store.loadInbox(), api.pendingProjectRequestCount()]);
+        const [notifications, network, inbox, projectRequestCount] = await Promise.all([store.loadNotifications(), store.loadConnections(), store.loadInbox(forceInbox), api.pendingProjectRequestCount()]);
         const requestCount = network.incoming.length;
         const messageCount = inbox.reduce((total, chat) => total + chat.unreadCount, 0);
         const notificationCount = notifications.filter((item) => !item.read).length;
@@ -74,13 +75,14 @@ export default function Navbar() {
         const projectRequestTotal = projectRequestCount.count || 0;
         if (!active) return;
         if (hasBaseline && projectRequestTotal > previousProjectRequests) {
-          setActivityToast({ path: "/projects", text: "Someone requested to join your project" });
+          setActivityToast({ path: "/projects", text: "You have a new project invitation or join request" });
         } else if (hasBaseline && requestCount > previousRequests) {
           const requester = network.incoming[0]?.name;
           setActivityToast({ path: "/explore", text: requester ? `${requester} sent you a connection request` : "You have a new connection request" });
         } else if (hasBaseline && projectUpdates.length > previousProjectUpdates) {
           const update = projectUpdates[0];
-          setActivityToast({ path: update.projectId ? `/projects/${update.projectId}` : "/notifications", text: "Your project team has a new update" });
+          const isInvite = update.message?.startsWith("You’re invited to join ");
+          setActivityToast({ path: isInvite ? "/projects" : update.projectId ? `/projects/${update.projectId}` : "/notifications", text: isInvite ? "You’ve been invited to a project team" : "Your project team has a new update" });
         } else if (hasBaseline && messageCount > previousUnreadMessages) {
           const sender = inbox.find((chat) => chat.unreadCount > 0)?.name;
           setActivityToast({ path: "/messages", text: sender ? `New message from ${sender}` : "You have a new message" });
@@ -107,12 +109,15 @@ export default function Navbar() {
     };
     refreshUnread();
     const interval = window.setInterval(refreshUnread, 15000);
-    window.addEventListener("connectly:backend-update", refreshUnread);
+    const refreshAfterBackendUpdate = () => refreshUnread();
+    const unsubscribeMessages = subscribeMessageEvents(() => refreshUnread(true));
+    window.addEventListener("connectly:backend-update", refreshAfterBackendUpdate);
     return () => {
       active = false;
       window.clearInterval(interval);
       if (toastTimer) window.clearTimeout(toastTimer);
-      window.removeEventListener("connectly:backend-update", refreshUnread);
+      unsubscribeMessages();
+      window.removeEventListener("connectly:backend-update", refreshAfterBackendUpdate);
     };
   }, []);
   async function handleLogout() {

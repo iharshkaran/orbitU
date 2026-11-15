@@ -136,7 +136,7 @@ export default function Notifications() {
                   <p className="text-sm font-semibold">{item.title}</p>
                   <p className="mt-1 text-sm leading-6 text-[#514e62]">{item.message}</p>
                   <p className="mt-2 text-xs text-[#858191]">{notificationTime(item.createdAt)}</p>
-                  {item.projectId && <Link to={`/projects/${item.projectId}`} onClick={() => { if (!item.read) markRead(item.id); }} className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#d9cffb] bg-[#eee9ff] px-3 py-2 text-xs font-bold text-[#5947a8] hover:bg-[#e4dcff]">Open project workspace</Link>}
+                  {item.projectId && <Link to={item.message?.startsWith("You’re invited to join ") ? "/projects" : `/projects/${item.projectId}`} onClick={() => { if (!item.read) markRead(item.id); }} className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#d9cffb] bg-[#eee9ff] px-3 py-2 text-xs font-bold text-[#5947a8] hover:bg-[#e4dcff]">{item.message?.startsWith("You’re invited to join ") ? "Review invitation" : "Open project workspace"}</Link>}
                 </div>
                 <div className="flex shrink-0 items-start gap-1">
                   {!item.read && <button type="button" disabled={busyId === item.id} onClick={() => markRead(item.id)} aria-label="Mark notification as read" className="rounded-lg p-2 text-[#858191] hover:bg-[#f4f0e8] hover:text-[#6f56d9] disabled:opacity-50"><Check size={16} /></button>}

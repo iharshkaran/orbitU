@@ -40,9 +40,12 @@ export function requireAuth(req, res, next) {
     return res.status(401).json({ success: false, message: "Your session is invalid or expired. Please sign in again." });
   }
 
-  User.findById(payload.sub)
+  User.findById(payload.sub).select("+tokenVersion")
     .then((user) => {
       if (!user) return res.status(401).json({ success: false, message: "Account not found. Please sign in again." });
+      if ((payload.ver || 0) !== (user.tokenVersion || 0)) {
+        return res.status(401).json({ success: false, message: "Your session has expired. Please sign in again." });
+      }
       req.user = user;
       return next();
     })

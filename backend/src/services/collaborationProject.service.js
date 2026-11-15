@@ -1,5 +1,7 @@
 import CollaborationProject from "../models/CollaborationProject.js";
 import Notification from "../models/Notification.js";
+import Follow from "../models/Follow.js";
+import User from "../models/User.js";
 import { NOTIFICATION_TYPES } from "../constants/notification.types.js";
 import { createNotification } from "./notification.service.js";
 import { httpError } from "../utils/httpError.js";
@@ -61,7 +63,10 @@ async function findWorkspaceForMember({ projectId, userId }) {
     .populate("tasks.assignee", "name photo headline")
     .populate("tasks.createdBy", "name photo")
     .populate("milestones.createdBy", "name photo")
-    .populate("activity.actor", "name photo");
+    .populate("activity.actor", "name photo")
+    .populate("resources.addedBy", "name photo")
+    .populate("invitations.user", "name photo headline university")
+    .populate("invitations.invitedBy", "name photo");
   if (!project) throw httpError(404, "Project not found.");
   const isMember = String(project.owner?._id || project.owner) === String(userId) || project.members.some((member) => String(member._id || member) === String(userId));
   if (!isMember) throw httpError(403, "Only project teammates can open this workspace.");
@@ -86,7 +91,19 @@ function formatWorkspace(project, userId) {
     id: String(item._id), actor: item.actor?._id ? { id: String(item.actor._id), name: item.actor.name || "A teammate", photo: item.actor.photo || "" } : null,
     action: item.action, kind: item.kind, title: item.title, summary: item.summary || "", createdAt: item.createdAt,
   }));
-  return { project: formatProject(project, userId), tasks, milestones, activity, progress: tasks.length ? Math.round((doneTasks / tasks.length) * 100) : 0 };
+  const resources = (project.resources || []).map((resource) => ({
+    id: String(resource._id), title: resource.title, url: resource.url, type: resource.type,
+    fileName: resource.fileName || "", mimeType: resource.mimeType || "", size: resource.size || 0,
+    addedBy: resource.addedBy?._id ? { id: String(resource.addedBy._id), name: resource.addedBy.name || "Teammate", photo: resource.addedBy.photo || "" } : null,
+    createdAt: resource.createdAt,
+  }));
+  const invitations = (project.invitations || []).map((invitation) => ({
+    id: String(invitation._id), status: invitation.status,
+    user: invitation.user?._id ? { id: String(invitation.user._id), name: invitation.user.name || "Student", photo: invitation.user.photo || "", headline: invitation.user.headline || "Student", university: invitation.user.university || "" } : null,
+    invitedBy: invitation.invitedBy?._id ? { id: String(invitation.invitedBy._id), name: invitation.invitedBy.name || "Teammate", photo: invitation.invitedBy.photo || "" } : null,
+    createdAt: invitation.createdAt,
+  }));
+  return { project: formatProject(project, userId), tasks, milestones, activity, resources, invitations, progress: tasks.length ? Math.round((doneTasks / tasks.length) * 100) : 0 };
 }
 
 function recordProjectActivity(project, { actorId, action, kind, title, summary = "" }) {
@@ -101,6 +118,110 @@ async function notifyProjectTeammates(project, actorId, { kind, action, title, s
   await Promise.allSettled([...recipients].filter((recipient) => recipient !== String(actorId)).map((recipient) => createNotification({
     recipient, actor: actorId, type: NOTIFICATION_TYPES.PROJECT, message, project: project._id,
   })));
+}
+
+async function ensureConnected({ userId, otherUserId }) {
+  const connected = await Follow.exists({ status: "accepted", $or: [{ from: userId, to: otherUserId }, { from: otherUserId, to: userId }] });
+  if (!connected) throw httpError(400, "You can invite a student only after connecting with them.");
+}
+
+export async function inviteProjectTeammate({ projectId, inviterId, inviteeId }) {
+  if (String(inviterId) === String(inviteeId)) throw httpError(400, "You cannot invite yourself.");
+  const project = await findWorkspaceForMember({ projectId, userId: inviterId });
+  if (["completed", "closed"].includes(project.status)) throw httpError(409, "Reopen this project before inviting teammates.");
+  if (project.members.length >= project.teamSize) throw httpError(409, "Your team is full. Increase team size before inviting someone.");
+  if (project.members.some((member) => String(member._id || member) === String(inviteeId))) throw httpError(409, "This student is already on your team.");
+  const invitee = await User.findById(inviteeId).select("name");
+  if (!invitee) throw httpError(404, "Student not found.");
+  await ensureConnected({ userId: inviterId, otherUserId: inviteeId });
+  const existingRequest = project.requests.find((request) => String(request.user) === String(inviteeId) && request.status === "pending");
+  if (existingRequest) throw httpError(409, "This student already has a pending request to join.");
+  let invitation = project.invitations.find((entry) => String(entry.user) === String(inviteeId));
+  if (invitation?.status === "pending") throw httpError(409, "An invitation is already waiting for this student.");
+  if (invitation) { invitation.status = "pending"; invitation.invitedBy = inviterId; invitation.updatedAt = new Date(); }
+  else { project.invitations.push({ user: inviteeId, invitedBy: inviterId }); invitation = project.invitations.at(-1); }
+  recordProjectActivity(project, { actorId: inviterId, action: "invited", kind: "teammate", title: invitee.name });
+  await project.save();
+  await createNotification({ recipient: inviteeId, actor: inviterId, type: NOTIFICATION_TYPES.PROJECT, message: `You’re invited to join ${project.title}. Review it in Projects.`, project: project._id });
+  return { id: String(invitation._id), status: invitation.status };
+}
+
+export async function listProjectInvitations({ userId }) {
+  const projects = await CollaborationProject.find({ "invitations.user": userId, "invitations.status": "pending" })
+    .populate("owner", "name photo university")
+    .populate("invitations.invitedBy", "name photo headline university")
+    .sort({ updatedAt: -1 }).limit(50).lean();
+  return projects.flatMap((project) => project.invitations.filter((entry) => String(entry.user) === String(userId) && entry.status === "pending").map((entry) => ({
+    id: String(entry._id), projectId: String(project._id), title: project.title, description: project.description,
+    owner: project.owner ? { id: String(project.owner._id), name: project.owner.name, photo: project.owner.photo || "", university: project.owner.university || "" } : null,
+    invitedBy: entry.invitedBy ? { id: String(entry.invitedBy._id), name: entry.invitedBy.name, photo: entry.invitedBy.photo || "", headline: entry.invitedBy.headline || "Student", university: entry.invitedBy.university || "" } : null,
+    createdAt: entry.createdAt,
+  })));
+}
+
+export async function decideProjectInvitation({ projectId, invitationId, userId, action }) {
+  const project = await CollaborationProject.findOne({ _id: projectId, "invitations._id": invitationId, "invitations.user": userId });
+  if (!project) throw httpError(404, "Project invitation not found.");
+  const invitation = project.invitations.id(invitationId);
+  if (!invitation || invitation.status !== "pending") throw httpError(404, "Pending invitation not found.");
+  if (action === "accept") {
+    if (["completed", "closed"].includes(project.status)) throw httpError(409, "This project is no longer accepting teammates.");
+    if (project.members.length >= project.teamSize) throw httpError(409, "This team is now full.");
+    invitation.status = "accepted";
+    if (!project.members.some((member) => String(member) === String(userId))) project.members.push(userId);
+    if (project.status === "open" && project.members.length >= project.teamSize) project.status = "full";
+  } else invitation.status = "declined";
+  recordProjectActivity(project, { actorId: userId, action: action === "accept" ? "joined" : "declined_invite", kind: "teammate", title: action === "accept" ? "the project team" : "the project invitation" });
+  await project.save();
+  if (String(invitation.invitedBy) !== String(userId)) {
+    await createNotification({ recipient: invitation.invitedBy, actor: userId, type: NOTIFICATION_TYPES.PROJECT, message: `${action === "accept" ? "Accepted" : "Declined"} your invitation to ${project.title}.`, project: project._id });
+  }
+  return { status: invitation.status, projectId: String(project._id) };
+}
+
+export async function addProjectResource({ projectId, userId, data }) {
+  const project = await findWorkspaceForMember({ projectId, userId });
+  if (project.resources.length >= 100) throw httpError(400, "This project already has 100 shared resources.");
+  if (data.type === "file" && data.size > 50 * 1024 * 1024) throw httpError(400, "Files must be 50 MB or smaller.");
+  project.resources.push({ ...data, addedBy: userId });
+  recordProjectActivity(project, { actorId: userId, action: "resource_added", kind: "resource", title: data.title });
+  await project.save();
+  await notifyProjectTeammates(project, userId, { action: "created", kind: "resource", title: data.title });
+  return getCollaborationWorkspace({ projectId, userId });
+}
+
+export async function deleteProjectResource({ projectId, resourceId, userId }) {
+  const project = await findWorkspaceForMember({ projectId, userId });
+  const resource = project.resources.id(resourceId);
+  if (!resource) throw httpError(404, "Shared resource not found.");
+  const title = resource.title;
+  project.resources.pull(resourceId);
+  recordProjectActivity(project, { actorId: userId, action: "resource_removed", kind: "resource", title });
+  await project.save();
+  await notifyProjectTeammates(project, userId, { action: "deleted", kind: "resource", title });
+  return getCollaborationWorkspace({ projectId, userId });
+}
+
+export async function removeProjectTeammate({ projectId, memberId, ownerId }) {
+  const project = await findWorkspaceForMember({ projectId, userId: ownerId });
+  if (String(project.owner?._id || project.owner) !== String(ownerId)) throw httpError(403, "Only the project owner can remove a teammate.");
+  if (String(project.owner?._id || project.owner) === String(memberId)) throw httpError(400, "The project owner cannot be removed from their own project.");
+  const member = project.members.find((person) => String(person._id || person) === String(memberId));
+  if (!member) throw httpError(404, "Project teammate not found.");
+  const memberName = member.name || "A teammate";
+  project.members.pull(memberId);
+  project.tasks.forEach((task) => {
+    if (String(task.assignee?._id || task.assignee || "") === String(memberId)) task.assignee = null;
+  });
+  project.requests.forEach((request) => {
+    if (String(request.user?._id || request.user) === String(memberId) && request.status === "accepted") request.status = "rejected";
+  });
+  if (project.status === "full" && project.members.length < project.teamSize) project.status = "open";
+  recordProjectActivity(project, { actorId: ownerId, action: "deleted", kind: "teammate", title: memberName, summary: "assigned tasks were unassigned" });
+  await project.save();
+  await createNotification({ recipient: memberId, actor: ownerId, type: NOTIFICATION_TYPES.PROJECT, message: `You were removed from the ${project.title} team. Your assigned tasks were unassigned.` });
+  await notifyProjectTeammates(project, ownerId, { action: "deleted", kind: "teammate", title: memberName, summary: "assigned tasks were unassigned" });
+  return getCollaborationWorkspace({ projectId, userId: ownerId });
 }
 
 function dateKey(value) {
@@ -228,13 +349,16 @@ export async function deleteProjectTask({ projectId, taskId, userId }) {
 }
 
 export async function countPendingProjectRequests({ userId }) {
-  const [result] = await CollaborationProject.aggregate([
-    { $match: { owner: userId } },
-    { $unwind: "$requests" },
-    { $match: { "requests.status": "pending" } },
-    { $count: "count" },
+  const [result, pendingInvitations] = await Promise.all([
+    CollaborationProject.aggregate([
+      { $match: { owner: userId } },
+      { $unwind: "$requests" },
+      { $match: { "requests.status": "pending" } },
+      { $count: "count" },
+    ]),
+    CollaborationProject.countDocuments({ invitations: { $elemMatch: { user: userId, status: "pending" } } }),
   ]);
-  return result?.count || 0;
+  return (result[0]?.count || 0) + pendingInvitations;
 }
 
 export async function createCollaborationProject({ ownerId, data }) {
@@ -250,6 +374,7 @@ export async function updateCollaborationProject({ projectId, ownerId, data }) {
     throw httpError(400, `Team size cannot be smaller than the ${project.members.length} current teammates.`);
   }
   Object.assign(project, data);
+  if (project.status === "full" && project.members.length < project.teamSize && data.status === undefined) project.status = "open";
   if (data.status === "open" && project.members.length >= project.teamSize) project.status = "full";
   await project.save();
   await project.populate([{ path: "owner", select: USER_FIELDS }, { path: "members", select: "name photo" }, { path: "requests.user", select: USER_FIELDS }]);

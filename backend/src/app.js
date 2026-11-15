@@ -17,6 +17,8 @@ import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js"
 
 const app = express();
 app.disable("x-powered-by");
+// The API is deployed behind Render's single trusted reverse proxy.
+app.set("trust proxy", 1);
 const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
   .split(",")
   .map((origin) => origin.trim())
