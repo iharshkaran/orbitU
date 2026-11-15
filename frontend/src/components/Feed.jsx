@@ -25,6 +25,7 @@ import PostCaption from "./PostCaption";
 import PostEditModal from "./PostEditModal";
 import PdfPreview from "./PdfPreview";
 import CommentThread from "./CommentThread";
+import PostLikesModal from "./PostLikesModal";
 import { removeRapidDuplicateComments } from "../utils/comments";
 
 const categories = [
@@ -79,6 +80,7 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
   const postingPostRef = useRef(false);
   const pendingLikesRef = useRef(new Set());
   const [pendingLikes, setPendingLikes] = useState([]);
+  const [likesPostId, setLikesPostId] = useState(null);
 
   useEffect(() => () => {
     if (shareFeedbackTimer.current) window.clearTimeout(shareFeedbackTimer.current);
@@ -636,7 +638,9 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
             )}
 
             <div className="mt-4 flex items-center justify-between border-b border-[#e7dfd0] pb-3 text-xs text-[#6e6a7b]">
-              <span>{post.likes} likes</span>
+              <button type="button" onClick={() => setLikesPostId(post.id)} aria-label={`See people who liked ${post.likes} times`} className="rounded-sm text-left transition hover:text-[#6f56d9] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7660dc]">
+                {post.likes} {post.likes === 1 ? "like" : "likes"}
+              </button>
               <button
                 type="button"
                 onClick={() => toggleComments(post.id)}
@@ -716,6 +720,7 @@ function Feed({ composerOnly = false, hideComposerOnMobile = false, onPostCreate
                 </form>
               </div>
             )}
+            {likesPostId === post.id && <PostLikesModal postId={post.id} onClose={() => setLikesPostId(null)} />}
           </article>
         );
       })}

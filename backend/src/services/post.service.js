@@ -100,3 +100,18 @@ export async function togglePostLike({ postId, user }) {
   }
   return { liked: !existing, likes: await Like.countDocuments({ post: post._id }) };
 }
+
+export async function listPostLikes(postId) {
+  const postExists = await Post.exists({ _id: postId });
+  if (!postExists) throw httpError(404, "Post not found.");
+  const likes = await Like.find({ post: postId })
+    .sort({ createdAt: -1 })
+    .populate("user", "name photo headline course year university")
+    .lean();
+  return likes.filter((like) => like.user?._id).map((like) => ({
+    id: String(like.user._id),
+    name: like.user.name || "Student",
+    photo: like.user.photo || "",
+    headline: like.user.headline || [like.user.course, like.user.year, like.user.university].filter(Boolean).join(" · ") || "OrbitU student",
+  }));
+}

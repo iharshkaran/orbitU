@@ -66,6 +66,7 @@ export const api = {
   updatePost: (id, payload) => request(`/posts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deletePost: (id) => request(`/posts/${id}`, { method: "DELETE" }),
   toggleLike: (id) => request(`/posts/${id}/like`, { method: "POST" }),
+  postLikes: (id) => request(`/posts/${encodeURIComponent(id)}/likes`),
   comment: (id, text) => request(`/posts/${id}/comments`, { method: "POST", body: JSON.stringify({ text }) }),
   replyToComment: (postId, parentId, text) => request(`/posts/${encodeURIComponent(postId)}/comments`, { method: "POST", body: JSON.stringify({ text, parentId }) }),
   updateComment: (postId, commentId, text) => request(`/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`, { method: "PATCH", body: JSON.stringify({ text }) }),

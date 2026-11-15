@@ -29,7 +29,7 @@ export async function createComment({ postId, user, text, parentId }) {
   if (!post) throw httpError(404, "Post not found.");
   let parentComment = null;
   if (parentId) {
-    parentComment = await Comment.findOne({ _id: parentId, post: post._id, parentComment: null });
+    parentComment = await Comment.findOne({ _id: parentId, post: post._id });
     if (!parentComment) throw httpError(404, "Comment not found.");
   }
   const comment = await Comment.create({ post: post._id, author: user._id, text, parentComment: parentComment?._id || null });
@@ -60,5 +60,12 @@ export async function updateComment({ postId, commentId, userId, text }) {
 export async function deleteComment({ postId, commentId, userId }) {
   const comment = await Comment.findOneAndDelete({ _id: commentId, post: postId, author: userId });
   if (!comment) throw httpError(404, "Comment not found or you cannot delete it.");
-  if (!comment.parentComment) await Comment.deleteMany({ parentComment: comment._id, post: postId });
+  let parentIds = [comment._id];
+  const descendantIds = [];
+  while (parentIds.length) {
+    const children = await Comment.find({ post: postId, parentComment: { $in: parentIds } }).select("_id").lean();
+    parentIds = children.map((child) => child._id);
+    descendantIds.push(...parentIds);
+  }
+  if (descendantIds.length) await Comment.deleteMany({ _id: { $in: descendantIds }, post: postId });
 }
