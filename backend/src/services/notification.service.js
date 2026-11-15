@@ -1,13 +1,17 @@
 import Notification from "../models/Notification.js";
 
-export async function createNotification({ recipient, actor = null, type = "system", message, post = null, connection = null, project = null }) {
+export async function createNotification({ recipient, actor = null, type = "system", message, post = null, comment = null, connection = null, project = null }) {
   if (!recipient || (actor && String(recipient) === String(actor))) return null;
-  return Notification.create({ recipient, actor, type, message, post, connection, project });
+  return Notification.create({ recipient, actor, type, message, post, comment, connection, project });
 }
 
 export async function listNotifications(userId) {
   const notifications = await Notification.find({ recipient: userId })
     .populate("actor", "name photo")
+    .populate("post", "text mediaName category")
+    .populate("comment", "text")
+    .populate("project", "title")
+    .populate("connection", "from to status")
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
@@ -15,7 +19,15 @@ export async function listNotifications(userId) {
     id: String(notification._id), type: notification.type,
     title: notification.type === "connection" ? "Connection update" : notification.type === "like" ? "New like" : notification.type === "comment" ? "New comment" : notification.type === "project" ? "Project team update" : "Connectly",
     message: notification.message, name: notification.actor?.name || "Connectly",
-    photo: notification.actor?.photo || "", projectId: notification.project ? String(notification.project) : "", read: notification.read, createdAt: notification.createdAt,
+    photo: notification.actor?.photo || "", actorId: notification.actor ? String(notification.actor._id) : "",
+    postId: notification.post ? String(notification.post._id) : "",
+    postContext: notification.post ? (notification.post.text || notification.post.mediaName || notification.post.category || "Post") : "",
+    commentId: notification.comment ? String(notification.comment._id) : "",
+    commentContext: notification.comment?.text || "",
+    projectId: notification.project ? String(notification.project._id) : "",
+    projectTitle: notification.project?.title || "",
+    connectionId: notification.connection ? String(notification.connection._id) : "",
+    read: notification.read, createdAt: notification.createdAt,
   }));
 }
 

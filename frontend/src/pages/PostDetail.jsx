@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { ArrowLeft, Heart, MessageCircle, Pencil, Send, Share2 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { api } from "../utils/api";
@@ -14,6 +14,7 @@ import InlineEmojiPicker from "../components/InlineEmojiPicker";
 
 function PostDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const { user } = useAuth();
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
@@ -35,6 +36,20 @@ function PostDetail() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [id]);
+
+  useEffect(() => {
+    if (loading || !location.hash.startsWith("#comment-")) return undefined;
+    const commentId = decodeURIComponent(location.hash.slice("#comment-".length));
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(`comment-${commentId}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (target) {
+        target.classList.add("ring-2", "ring-[#7660dc]", "rounded-xl");
+        window.setTimeout(() => target.classList.remove("ring-2", "ring-[#7660dc]", "rounded-xl"), 1800);
+      }
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [loading, comments, location.hash]);
 
   async function toggleLike() {
     if (!post || busyRef.current) return;

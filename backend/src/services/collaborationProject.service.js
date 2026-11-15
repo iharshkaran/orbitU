@@ -219,7 +219,7 @@ export async function removeProjectTeammate({ projectId, memberId, ownerId }) {
   if (project.status === "full" && project.members.length < project.teamSize) project.status = "open";
   recordProjectActivity(project, { actorId: ownerId, action: "deleted", kind: "teammate", title: memberName, summary: "assigned tasks were unassigned" });
   await project.save();
-  await createNotification({ recipient: memberId, actor: ownerId, type: NOTIFICATION_TYPES.PROJECT, message: `You were removed from the ${project.title} team. Your assigned tasks were unassigned.` });
+  await createNotification({ recipient: memberId, actor: ownerId, type: NOTIFICATION_TYPES.PROJECT, message: `You were removed from the ${project.title} team. Your assigned tasks were unassigned.`, project: project._id });
   await notifyProjectTeammates(project, ownerId, { action: "deleted", kind: "teammate", title: memberName, summary: "assigned tasks were unassigned" });
   return getCollaborationWorkspace({ projectId, userId: ownerId });
 }

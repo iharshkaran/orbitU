@@ -68,7 +68,7 @@ function CommentItem({ comment, currentUserId, postId, onChange, onError, allCom
     finally { setBusy(false); }
   }
 
-  return <div className={`min-w-0 ${depth ? "ml-3 border-l-2 border-[#e7dfd0] pl-2 sm:ml-5 sm:pl-3" : ""}`}>
+  return <div id={`comment-${comment.id}`} className={`min-w-0 scroll-mt-24 ${depth ? "ml-3 border-l-2 border-[#e7dfd0] pl-2 sm:ml-5 sm:pl-3" : ""}`}>
     <div className="flex items-start gap-2.5">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#d8d0c1] bg-[#c9bcff] text-xs font-semibold text-[#5947a8]">
         {comment.photo ? <img src={comment.photo} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" /> : comment.name?.charAt(0)}

@@ -19,6 +19,21 @@ import { useConnectlyStore } from "../store/useConnectlyStore";
 const iconMap = { connection: UserPlus, like: Heart, comment: MessageCircle, project: FolderKanban, system: Award };
 const loadNotificationData = (force = false) => Promise.all([useConnectlyStore.getState().loadNotifications(force), useConnectlyStore.getState().loadConnections(force)]);
 
+function notificationHref(item) {
+  if (item.postId) return `/post/${item.postId}${item.commentId ? `#comment-${item.commentId}` : ""}`;
+  if (item.projectId) return item.message?.startsWith("You’re invited to join ") ? "/projects" : `/projects/${item.projectId}`;
+  if (item.connectionId || item.type === "connection") return "/connections";
+  return "";
+}
+
+function contextLabel(item) {
+  if (item.commentId) return `Comment: ${item.commentContext || item.postContext || "View conversation"}`;
+  if (item.postId) return `Post: ${item.postContext || "View post"}`;
+  if (item.projectId) return `Project: ${item.projectTitle || "Open project"}`;
+  if (item.connectionId) return "Your connections";
+  return "";
+}
+
 export default function Notifications() {
   const [items, setItems] = useState([]);
   const [connections, setConnections] = useState({ incoming: [], outgoing: [], connected: [] });
@@ -126,18 +141,21 @@ export default function Notifications() {
         <section className="mt-6 overflow-hidden rounded-[26px] border-2 border-[#191a32] bg-white shadow-[4px_5px_0_#e7dfd0]">
           {loading ? <p className="px-6 py-14 text-center text-sm text-[#6e6a7b]">Loading notifications...</p> : items.map((item) => {
             const Icon = iconMap[item.type] || (item.type === "post" ? FileText : Bell);
+            const href = notificationHref(item);
+            const context = contextLabel(item);
+            const content = <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{item.title}</p>
+              <p className="mt-1 text-sm leading-6 text-[#514e62]">{item.message}</p>
+              {context && <p className="mt-2 line-clamp-2 rounded-lg border border-[#e7dfd0] bg-[#f8f5ef] px-3 py-2 text-xs text-[#6e6a7b]"><span className="font-semibold text-[#5947a8]">{context.split(":")[0]}:</span>{context.slice(context.indexOf(":") + 1)}</p>}
+              <p className="mt-2 text-xs text-[#858191]">{notificationTime(item.createdAt)}{href && <span className="ml-2 font-semibold text-[#6f56d9]">Open update →</span>}</p>
+            </div>;
+            const icon = <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-[#191a32] bg-[#c9bcff] text-[#5947a8]">
+              {item.photo ? <img src={item.photo} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" /> : <Icon size={19} />}
+              {!item.read && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[#ffe35b] ring-2 ring-white" />}
+            </div>;
             return (
               <article key={item.id} className={`flex gap-4 border-b border-[#e7dfd0] p-5 last:border-0 ${item.read ? "bg-white" : "bg-[#fff9e8]"}`}>
-                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-[#191a32] bg-[#c9bcff] text-[#5947a8]">
-                  {item.photo ? <img src={item.photo} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" /> : <Icon size={19} />}
-                  {!item.read && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[#ffe35b] ring-2 ring-white" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">{item.title}</p>
-                  <p className="mt-1 text-sm leading-6 text-[#514e62]">{item.message}</p>
-                  <p className="mt-2 text-xs text-[#858191]">{notificationTime(item.createdAt)}</p>
-                  {item.projectId && <Link to={item.message?.startsWith("You’re invited to join ") ? "/projects" : `/projects/${item.projectId}`} onClick={() => { if (!item.read) markRead(item.id); }} className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#d9cffb] bg-[#eee9ff] px-3 py-2 text-xs font-bold text-[#5947a8] hover:bg-[#e4dcff]">{item.message?.startsWith("You’re invited to join ") ? "Review invitation" : "Open project workspace"}</Link>}
-                </div>
+                {href ? <Link to={href} onClick={() => { if (!item.read) void markRead(item.id); }} className="flex min-w-0 flex-1 items-start gap-4 rounded-xl outline-none transition hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-[#7660dc]">{icon}{content}</Link> : <div className="flex min-w-0 flex-1 items-start gap-4">{icon}{content}</div>}
                 <div className="flex shrink-0 items-start gap-1">
                   {!item.read && <button type="button" disabled={busyId === item.id} onClick={() => markRead(item.id)} aria-label="Mark notification as read" className="rounded-lg p-2 text-[#858191] hover:bg-[#f4f0e8] hover:text-[#6f56d9] disabled:opacity-50"><Check size={16} /></button>}
                   <button type="button" disabled={busyId === item.id} onClick={() => dismiss(item.id)} aria-label="Dismiss notification" className="rounded-lg p-2 text-[#858191] hover:bg-[#f4f0e8] hover:text-[#17182d] disabled:opacity-50"><X size={16} /></button>

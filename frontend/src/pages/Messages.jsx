@@ -17,11 +17,103 @@ function flagAssetUrl(emoji) {
   return `https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/${codepoints.join("-")}.svg`;
 }
 const FLAG_SEQUENCE = /^[\u{1F1E6}-\u{1F1FF}]{2}$/u;
+const FLAG_PARTS_PATTERN = /([\u{1F1E6}-\u{1F1FF}]{2})/gu;
 function MessageText({ text, className = "", flagClassName = "" }) {
   const parts = String(text || "").split(/([\u{1F1E6}-\u{1F1FF}]{2})/gu);
   return <span className={className}>{parts.map((part, index) => FLAG_SEQUENCE.test(part)
     ? <img key={`${part}-${index}`} src={flagAssetUrl(part)} alt={part} title={part} className={`mx-0.5 inline-block h-[1em] w-[1.4em] rounded-[2px] object-cover align-[-0.12em] ${flagClassName}`} />
     : <span key={`${index}-${part}`}>{part}</span>)}</span>;
+}
+
+function readComposerText(element) {
+  if (!element) return "";
+  return [...element.childNodes].map((node) => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+    if (node.nodeType === Node.ELEMENT_NODE && node.dataset.chatFlag) return node.dataset.chatFlag;
+    return node.textContent || "";
+  }).join("");
+}
+
+function composerCaretOffset(element) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || !element.contains(selection.anchorNode)) return readComposerText(element).length;
+  let offset = 0;
+  let found = false;
+  const visit = (node) => {
+    if (found) return;
+    if (node === selection.anchorNode) {
+      if (node.nodeType === Node.TEXT_NODE) offset += selection.anchorOffset;
+      else for (let index = 0; index < selection.anchorOffset; index += 1) offset += nodeLength(node.childNodes[index]);
+      found = true;
+      return;
+    }
+    if (node.nodeType === Node.TEXT_NODE) { offset += node.textContent?.length || 0; return; }
+    if (node.nodeType === Node.ELEMENT_NODE && node.dataset.chatFlag) { offset += node.dataset.chatFlag.length; return; }
+    [...node.childNodes].forEach(visit);
+  };
+  const nodeLength = (node) => node?.dataset?.chatFlag?.length ?? (node?.textContent?.length || 0);
+  visit(element);
+  return found ? offset : readComposerText(element).length;
+}
+
+function setComposerCaretOffset(element, targetOffset) {
+  if (!element) return;
+  const selection = window.getSelection();
+  const range = document.createRange();
+  let remaining = targetOffset;
+  let placed = false;
+  const place = (node) => {
+    if (placed) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      const length = node.textContent?.length || 0;
+      if (remaining <= length) {
+        range.setStart(node, remaining);
+        range.collapse(true);
+        placed = true;
+      } else remaining -= length;
+      return;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE && node.dataset.chatFlag) {
+      const length = node.dataset.chatFlag.length;
+      if (remaining <= length) {
+        range.setStartAfter(node);
+        range.collapse(true);
+        placed = true;
+      } else remaining -= length;
+      return;
+    }
+    [...node.childNodes].forEach(place);
+  };
+  [...element.childNodes].forEach(place);
+  if (!placed) {
+    range.selectNodeContents(element);
+    range.collapse(false);
+  }
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function renderComposerFlags(element, caretOffset = null, sourceText = null) {
+  if (!element) return;
+  const text = sourceText ?? readComposerText(element);
+  const parts = text.split(FLAG_PARTS_PATTERN);
+  const fragment = document.createDocumentFragment();
+  parts.forEach((part) => {
+    if (!part) return;
+    if (FLAG_SEQUENCE.test(part)) {
+      const flag = document.createElement("img");
+      flag.src = flagAssetUrl(part);
+      flag.alt = part;
+      flag.title = part;
+      flag.dataset.chatFlag = part;
+      flag.contentEditable = "false";
+      flag.draggable = false;
+      flag.className = "mx-0.5 inline-block h-[1em] w-[1.4em] rounded-[2px] object-cover align-[-0.12em]";
+      fragment.append(flag);
+    } else fragment.append(document.createTextNode(part));
+  });
+  element.replaceChildren(fragment);
+  if (caretOffset !== null) setComposerCaretOffset(element, caretOffset);
 }
 
 
@@ -129,7 +221,6 @@ export default function Messages() {
   const [error, setError] = useState("");
   const threadRef = useRef(null);
   const composerRef = useRef(null);
-  const composerOverlayRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimersRef = useRef(new Map());
   const typingSentAtRef = useRef(new Map());
@@ -138,11 +229,6 @@ export default function Messages() {
   const reactionPickerMessage = messages.find((message) => message.id === reactionPickerId);
   const activePresence = presenceById[activeId];
 
-  function syncComposerOverlay() {
-    const offset = composerRef.current?.scrollLeft || 0;
-    const textLayer = composerOverlayRef.current?.firstElementChild;
-    if (textLayer) textLayer.style.transform = `translateX(-${offset}px)`;
-  }
   const latestOutgoingId = [...messages].reverse().find((message) => message.from === "you")?.id;
   const visibleChats = useMemo(() => chats.filter((chat) => chat.name.toLowerCase().includes(query.toLowerCase())), [chats, query]);
 
@@ -182,6 +268,13 @@ export default function Messages() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
+
+  useEffect(() => {
+    const composer = composerRef.current;
+    if (!composer || readComposerText(composer) === draft) return;
+    renderComposerFlags(composer, null, draft);
+    setComposerCaretOffset(composer, draft.length);
+  }, [draft]);
 
   useEffect(() => {
     let mounted = true;
@@ -444,7 +537,12 @@ export default function Messages() {
   }
 
   function handleDraftChange(event) {
-    const value = event.target.value;
+    const composer = event.currentTarget;
+    const value = readComposerText(composer);
+    if (/[\u{1F1E6}-\u{1F1FF}]{2}/u.test(composer.textContent || "")) {
+      const caretOffset = composerCaretOffset(composer);
+      renderComposerFlags(composer, caretOffset);
+    }
     setDraft(value);
     if (!activeId || !value.trim()) return;
     const now = Date.now();
@@ -526,10 +624,8 @@ export default function Messages() {
             <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf,.pdf" onChange={chooseAttachment} className="hidden" aria-label="Choose image, PDF, or video" />
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending || Boolean(editingMessageId)} aria-label="Attach image, PDF, or video" title="Attach image, PDF, or video" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#e7dfd0] bg-white text-[#6e6a7b] transition hover:bg-[#f4f0e8] hover:text-[#5947a8] disabled:cursor-not-allowed disabled:opacity-40"><Paperclip size={19}/></button>
             <div className="relative min-h-11 min-w-0 flex-1">
-              <div ref={composerOverlayRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 flex items-center overflow-hidden rounded-2xl border-2 border-transparent px-4 py-2.5 text-sm">
-                <MessageText text={draft || (editingMessageId ? "Edit your message…" : replyingTo ? `Reply to ${replyingTo.name}…` : `Message ${active.name.split(" ")[0]}…`)} className={`block w-max whitespace-pre ${draft ? "text-[#17182d]" : "text-[#858191]"}`} flagClassName="w-[2ch]" />
-              </div>
-              <input ref={composerRef} value={draft} onChange={handleDraftChange} onScroll={syncComposerOverlay} maxLength={2000} placeholder="" className="relative z-10 h-full min-h-11 w-full rounded-2xl border-2 border-[#e7dfd0] bg-transparent px-4 py-2.5 text-sm text-transparent caret-[#17182d] outline-none selection:bg-[#c9bcff]/50 selection:text-transparent transition focus:border-[#7660dc]" />
+              {!draft && <span aria-hidden="true" className="pointer-events-none absolute inset-x-4 top-1/2 -translate-y-1/2 truncate text-sm text-[#858191]">{editingMessageId ? "Edit your message…" : replyingTo ? `Reply to ${replyingTo.name}…` : `Message ${active.name.split(" ")[0]}…`}</span>}
+              <div ref={composerRef} role="textbox" aria-label="Message" aria-multiline="false" contentEditable={!sending} suppressContentEditableWarning onInput={handleDraftChange} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (!event.shiftKey) event.currentTarget.closest("form")?.requestSubmit(); } }} onPaste={(event) => { event.preventDefault(); document.execCommand("insertText", false, event.clipboardData.getData("text/plain")); }} className="h-full min-h-11 w-full overflow-x-auto whitespace-pre rounded-2xl border-2 border-[#e7dfd0] bg-white px-4 py-2.5 text-sm leading-5 text-[#17182d] outline-none transition focus:border-[#7660dc]" />
             </div>
             <button type="submit" disabled={(!draft.trim() && !attachment) || sending} aria-label={editingMessageId ? "Save message" : "Send message"} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-[#191a32] bg-[#ffe35b] px-3.5 font-bold text-black shadow-[0_3px_0_#191a32] transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-50 sm:px-4">{sending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#17182d]/30 border-t-[#17182d]" /> : editingMessageId ? <Check size={17}/> : <Send size={17}/>}<span className="hidden sm:inline">{sending ? attachment ? `Uploading ${uploadProgress}%` : "Saving…" : editingMessageId ? "Save" : "Send"}</span></button>
           </div>

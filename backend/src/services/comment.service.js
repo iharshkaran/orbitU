@@ -41,6 +41,7 @@ export async function createComment({ postId, user, text, parentId }) {
       type: NOTIFICATION_TYPES.COMMENT,
       message: parentComment ? `${user.name} replied to your comment.` : `${user.name} commented on your post.`,
       post: post._id,
+      comment: comment._id,
     });
   }
   await comment.populate("author", "name photo");

@@ -6,6 +6,7 @@ const notificationSchema = new mongoose.Schema({
   type: { type: String, enum: ["connection", "like", "comment", "project", "system"], default: "system", required: true },
   message: { type: String, required: true, trim: true, maxlength: 300 },
   post: { type: mongoose.Schema.Types.ObjectId, ref: "Post", default: null },
+  comment: { type: mongoose.Schema.Types.ObjectId, ref: "Comment", default: null },
   connection: { type: mongoose.Schema.Types.ObjectId, ref: "Follow", default: null },
   project: { type: mongoose.Schema.Types.ObjectId, ref: "CollaborationProject", default: null },
   read: { type: Boolean, default: false, index: true },
