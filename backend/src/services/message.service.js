@@ -26,6 +26,7 @@ function formatMessage(message, viewerId) {
     senderId: String(sender._id || sender),
     from: String(sender._id || sender) === String(viewerId) ? "you" : "them",
     text: message.text,
+    media: message.media?.url ? message.media : null,
     createdAt: message.createdAt,
     editedAt: message.editedAt || null,
     readAt: message.readAt,
@@ -69,7 +70,7 @@ export async function listMessageInbox(userId) {
       name: other.name,
       photo: other.photo || "",
       role: [other.course, other.year, other.university].filter(Boolean).join(" · ") || other.headline || "Connectly student",
-      lastMessage: message.text,
+      lastMessage: message.text || (message.media?.type === "image" ? "Photo" : message.media?.type === "video" ? "Video" : message.media?.name || "PDF document"),
       lastMessageAt: message.createdAt,
       unreadCount: 0,
     };
@@ -109,7 +110,7 @@ export async function listMessageThread({ userId, otherUserId }) {
   return messages.map((message) => formatMessage(message, userId));
 }
 
-export async function createMessage({ user, otherUserId, text, replyToId }) {
+export async function createMessage({ user, otherUserId, text = "", media, replyToId }) {
   await ensureConnected(user._id, otherUserId);
   let replyTo = null;
   if (replyToId) {
@@ -119,7 +120,7 @@ export async function createMessage({ user, otherUserId, text, replyToId }) {
     });
     if (!replyTo) throw httpError(404, "The message you are replying to could not be found.");
   }
-  const message = await Message.create({ sender: user._id, recipient: otherUserId, text, replyTo: replyTo?._id || null });
+  const message = await Message.create({ sender: user._id, recipient: otherUserId, text, media, replyTo: replyTo?._id || null });
   await message.populate("sender", "name");
   await populateMessage(message);
   const senderView = formatMessage(message, user._id);

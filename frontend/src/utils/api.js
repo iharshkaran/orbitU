@@ -77,7 +77,7 @@ export const api = {
   messagePresence: () => request("/messages/presence"),
   messageTyping: (userId) => request(`/messages/typing/${encodeURIComponent(userId)}`, { method: "POST", body: "{}" }),
   messageThread: (userId) => request(`/messages/${encodeURIComponent(userId)}`),
-  sendMessage: (userId, text, replyToId) => request(`/messages/${encodeURIComponent(userId)}`, { method: "POST", body: JSON.stringify({ text, ...(replyToId ? { replyToId } : {}) }) }),
+  sendMessage: (userId, payload, replyToId) => request(`/messages/${encodeURIComponent(userId)}`, { method: "POST", body: JSON.stringify(typeof payload === "string" ? { text: payload, ...(replyToId ? { replyToId } : {}) } : payload) }),
   editMessage: (userId, messageId, text) => request(`/messages/${encodeURIComponent(userId)}/${encodeURIComponent(messageId)}`, { method: "PATCH", body: JSON.stringify({ text }) }),
   deleteMessage: (userId, messageId) => request(`/messages/${encodeURIComponent(userId)}/${encodeURIComponent(messageId)}`, { method: "DELETE" }),
   toggleMessageReaction: (userId, messageId, emoji) => request(`/messages/${encodeURIComponent(userId)}/${encodeURIComponent(messageId)}/reaction`, { method: "PUT", body: JSON.stringify({ emoji }) }),

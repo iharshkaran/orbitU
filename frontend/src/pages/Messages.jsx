@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Check, MoreHorizontal, Pencil, Reply, Search, Send, Smile, Trash2, X, MessageCircle } from "lucide-react";
+import { ArrowLeft, Check, MoreHorizontal, Pencil, Reply, Search, Send, Smile, Trash2, X, MessageCircle, Paperclip, FileText, ExternalLink } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { api } from "../utils/api";
 import { useConnectlyStore } from "../store/useConnectlyStore";
 import { subscribeMessageEvents } from "../utils/messageEvents";
 import { useAuth } from "../context/useAuth";
+import { uploadFileToImageKit } from "../utils/imagekitUpload";
 
 const QUICK_EMOJIS = ["❤️", "😂", "👍", "😮", "😢", "🔥", "🙏", "👏", "🎉"];
 const FLAG_CODES = "AC AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CP CR CU CV CW CX CY CZ DE DG DJ DK DM DO DZ EA EC EE EG EH ER ES ET EU FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU IC ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TA TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM UN US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW".split(" ");
@@ -71,6 +72,20 @@ function messageTime(value) {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
+function messagePreview(message) {
+  if (message?.text) return message.text;
+  if (message?.media?.type === "image") return "Photo";
+  if (message?.media?.type === "video") return "Video";
+  return message?.media?.name || (message?.media ? "PDF document" : "Start a conversation");
+}
+
+function mediaTypeFor(file) {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) return "pdf";
+  return "";
+}
+
 function presenceLabel(presence) {
   if (presence?.online) return "Online";
   if (!presence?.lastSeenAt) return "Offline";
@@ -94,6 +109,9 @@ export default function Messages() {
   const [messages, setMessages] = useState([]);
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
+  const [attachment, setAttachment] = useState(null);
+  const [attachmentPreview, setAttachmentPreview] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [loading, setLoading] = useState(() => cachedConnections === null && cachedInbox === null);
   const [threadLoading, setThreadLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -110,6 +128,7 @@ export default function Messages() {
   const [error, setError] = useState("");
   const threadRef = useRef(null);
   const composerRef = useRef(null);
+  const fileInputRef = useRef(null);
   const typingTimersRef = useRef(new Map());
   const typingSentAtRef = useRef(new Map());
   const active = chats.find((chat) => chat.userId === activeId);
@@ -118,6 +137,39 @@ export default function Messages() {
   const activePresence = presenceById[activeId];
   const latestOutgoingId = [...messages].reverse().find((message) => message.from === "you")?.id;
   const visibleChats = useMemo(() => chats.filter((chat) => chat.name.toLowerCase().includes(query.toLowerCase())), [chats, query]);
+
+  function clearAttachment() {
+    setAttachment((current) => {
+      if (current?.preview) URL.revokeObjectURL(current.preview);
+      return null;
+    });
+    setAttachmentPreview("");
+    setUploadProgress(0);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function chooseAttachment(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const type = mediaTypeFor(file);
+    const limits = { image: 5 * 1024 * 1024, pdf: 10 * 1024 * 1024, video: 50 * 1024 * 1024 };
+    const labels = { image: "5 MB", pdf: "10 MB", video: "50 MB" };
+    if (!type) {
+      setError("Choose an image, PDF, or video file.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > limits[type]) {
+      setError(`Choose a ${type} smaller than ${labels[type]}.`);
+      event.target.value = "";
+      return;
+    }
+    clearAttachment();
+    const preview = type === "image" || type === "video" ? URL.createObjectURL(file) : "";
+    setAttachment({ file, type, preview });
+    setAttachmentPreview(preview);
+    setError("");
+  }
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -179,7 +231,7 @@ export default function Messages() {
       const incoming = data.message;
       setChats((current) => current.map((chat) => chat.userId === data.conversationId ? {
         ...chat,
-        lastMessage: incoming.text,
+        lastMessage: messagePreview(incoming),
         lastMessageAt: incoming.createdAt,
         unreadCount: data.conversationId === activeId || incoming.from === "you" ? 0 : chat.unreadCount + 1,
       } : chat).sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0)));
@@ -209,6 +261,10 @@ export default function Messages() {
     for (const timer of typingTimersRef.current.values()) window.clearTimeout(timer);
   }, []);
 
+  useEffect(() => () => {
+    if (attachment?.preview) URL.revokeObjectURL(attachment.preview);
+  }, [attachment?.preview]);
+
   useEffect(() => {
     const thread = threadRef.current;
     if (thread) thread.scrollTo({ top: thread.scrollHeight, behavior: "smooth" });
@@ -235,25 +291,36 @@ export default function Messages() {
   async function sendMessage(event) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text || !active || sending) return;
+    if ((!text && !attachment) || !active || sending) return;
+    if (editingMessageId && attachment) {
+      setError("Remove the attachment before editing this message.");
+      return;
+    }
     const wasEditing = Boolean(editingMessageId);
     const wasEditingLatest = wasEditing && messages.at(-1)?.id === editingMessageId;
     setError("");
     setSending(true);
     try {
+      let payload = { text, ...(replyingTo?.id ? { replyToId: replyingTo.id } : {}) };
+      if (attachment) {
+        setUploadProgress(0);
+        const uploaded = await uploadFileToImageKit(attachment.file, "/connectly/messages", setUploadProgress);
+        payload = { ...payload, media: { url: uploaded.url, type: attachment.type, name: attachment.file.name, mimeType: attachment.file.type } };
+      }
       const message = editingMessageId
         ? await api.editMessage(activeId, editingMessageId, text)
-        : await api.sendMessage(activeId, text, replyingTo?.id);
+        : await api.sendMessage(activeId, payload);
       useConnectlyStore.getState().loadInbox(true).catch(() => {});
       setMessages((current) => editingMessageId
         ? current.map((item) => item.id === message.id ? message : item)
         : current.some((item) => item.id === message.id) ? current : [...current, message]);
       if (!wasEditing || wasEditingLatest) {
-        setChats((current) => current.map((chat) => chat.userId === activeId ? { ...chat, lastMessage: text, ...(wasEditing ? {} : { lastMessageAt: message.createdAt }) } : chat).sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0)));
+        setChats((current) => current.map((chat) => chat.userId === activeId ? { ...chat, lastMessage: messagePreview(message), ...(wasEditing ? {} : { lastMessageAt: message.createdAt }) } : chat).sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0)));
       }
       setDraft("");
       setReplyingTo(null);
       setEditingMessageId("");
+      clearAttachment();
       window.dispatchEvent(new Event("connectly:message-update"));
       window.dispatchEvent(new Event("connectly:backend-update"));
     } catch (requestError) { setError(requestError.message); }
@@ -280,7 +347,7 @@ export default function Messages() {
   }
 
   function startReply(message) {
-    setReplyingTo({ id: message.id, text: message.text, from: message.from, name: message.from === "you" ? user?.name || "You" : active?.name || "Student" });
+    setReplyingTo({ id: message.id, text: messagePreview(message), from: message.from, name: message.from === "you" ? user?.name || "You" : active?.name || "Student" });
     setEditingMessageId("");
     setDraft("");
     setMessageMenuId("");
@@ -288,6 +355,12 @@ export default function Messages() {
   }
 
   function startEdit(message) {
+    if (!message.text) {
+      setError("Only text messages can be edited. You can delete and resend an attachment.");
+      setMessageMenuId("");
+      setMessageMenuPosition(null);
+      return;
+    }
     setEditingMessageId(message.id);
     setReplyingTo(null);
     setDraft(message.text);
@@ -382,7 +455,7 @@ export default function Messages() {
           <label className="flex items-center gap-2 rounded-2xl border-2 border-[#e7dfd0] bg-[#fffdf9] px-3 transition focus-within:border-[#7660dc]"><Search size={16} className="shrink-0 text-[#858191]"/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search conversations" className="w-full bg-transparent py-2.5 text-sm outline-none"/></label>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {visibleChats.map((chat) => <button key={chat.userId} onClick={() => { if (activeId !== chat.userId) { setMessages([]); setThreadLoading(true); setDraft(""); setReplyingTo(null); setEditingMessageId(""); setMessageMenuId(""); setEmojiPickerOpen(false); } setActiveId(chat.userId); }} className={`flex w-full items-center gap-3 border-b border-[#e7dfd0]/80 p-3.5 text-left transition hover:bg-[#f4f0e8] ${activeId === chat.userId ? "bg-[#eee9ff]" : ""}`}>
+          {visibleChats.map((chat) => <button key={chat.userId} onClick={() => { if (activeId !== chat.userId) { setMessages([]); setThreadLoading(true); setDraft(""); clearAttachment(); setReplyingTo(null); setEditingMessageId(""); setMessageMenuId(""); setEmojiPickerOpen(false); } setActiveId(chat.userId); }} className={`flex w-full items-center gap-3 border-b border-[#e7dfd0]/80 p-3.5 text-left transition hover:bg-[#f4f0e8] ${activeId === chat.userId ? "bg-[#eee9ff]" : ""}`}>
             <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#191a32] bg-[#eee9ff] font-bold text-[#5947a8]">{chat.photo ? <img src={chat.photo} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover"/> : chat.initials || chat.name.split(" ").map((part) => part[0]).join("")}{presenceById[chat.userId]?.online && <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-[#36a86a]" />}</span>
             <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold">{chat.name}</span>{chat.lastMessageAt && <time className="shrink-0 text-[10px] text-[#858191]">{messageTime(chat.lastMessageAt)}</time>}</span><span className={`mt-1 block truncate text-xs ${chat.unreadCount > 0 ? "font-semibold text-[#343247]" : "text-[#6e6a7b]"}`}>{typingById[chat.userId] ? <span className="font-semibold text-[#6f56d9]">typing…</span> : chat.lastMessage}</span></span>
             {chat.unreadCount > 0 && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#ffe35b] px-1 text-[10px] font-bold text-[#17182d]">{chat.unreadCount > 9 ? "9+" : chat.unreadCount}</span>}
@@ -393,7 +466,7 @@ export default function Messages() {
       </aside>
       {active ? <div className="flex min-h-0 min-w-0 flex-col bg-[#fffdf9]">
         <header className="z-10 flex shrink-0 items-center gap-3 border-b border-[#e7dfd0] bg-white px-4 py-3 sm:px-5">
-          <button type="button" onClick={() => { setActiveId(""); setMessages([]); setDraft(""); setReplyingTo(null); setEditingMessageId(""); setMessageMenuId(""); setEmojiPickerOpen(false); setError(""); }} aria-label="Back to connections" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#e7dfd0] text-[#514e62] transition hover:bg-[#f4f0e8] md:hidden"><ArrowLeft size={18} /></button>
+          <button type="button" onClick={() => { setActiveId(""); setMessages([]); setDraft(""); clearAttachment(); setReplyingTo(null); setEditingMessageId(""); setMessageMenuId(""); setEmojiPickerOpen(false); setError(""); }} aria-label="Back to connections" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#e7dfd0] text-[#514e62] transition hover:bg-[#f4f0e8] md:hidden"><ArrowLeft size={18} /></button>
           <Link to={`/profile/${active.studentId || active.userId}`} aria-label={`Open ${active.name}'s profile`} className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#191a32] bg-[#eee9ff] font-bold text-[#5947a8]">{active.photo ? <img src={active.photo} alt="" decoding="async" className="h-full w-full object-cover"/> : active.name.split(" ").map((part) => part[0]).join("")}</Link>
           <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-bold">{active.name}</h2><p className="truncate text-xs text-[#6e6a7b]">{active.role || "OrbitU student"}</p></div>
           <span className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${activePresence?.online ? "bg-[#e8f6ef] text-[#28734d]" : "bg-[#f4f0e8] text-[#777386]"}`}>{activePresence?.online && <span className="h-1.5 w-1.5 rounded-full bg-[#36a86a]"/>}{typingById[activeId] ? "typing…" : presenceLabel(activePresence)}</span>
@@ -402,13 +475,21 @@ export default function Messages() {
           {threadLoading && messages.length === 0 ? <div className="m-auto flex items-center gap-2 text-sm text-[#858191]"><span className="h-4 w-4 animate-spin rounded-full border-2 border-[#7660dc]/30 border-t-[#7660dc]"/>Loading conversation…</div> : messages.map((message) => {
             const reactions = groupedReactions(message.reactions, user?.id);
             const singleEmoji = isSingleEmoji(message.text);
+            const messageActions = <><button type="button" onClick={(event) => toggleReactionPicker(event, message.id)} aria-label="Add reaction" title="React to message" className="ml-1 rounded p-0.5 text-[#777386] transition hover:bg-black/5 hover:text-[#5947a8] opacity-100 md:opacity-0 md:group-hover:opacity-100"><Smile size={15}/></button><button type="button" onClick={(event) => toggleMessageMenu(event, message.id)} aria-label="Message options" title="Message options" className="rounded p-0.5 text-[#777386] opacity-100 transition hover:bg-black/5 hover:text-[#17182d] md:opacity-0 md:group-hover:opacity-100"><MoreHorizontal size={15}/></button>{message.editedAt && <span>Edited ·</span>}<time>{messageTime(message.createdAt)}</time>{message.from === "you" && message.id === latestOutgoingId && <span aria-label={message.readAt ? "Seen" : "Sent"}>· {message.readAt ? "Seen" : "Sent"}</span>}</>;
             return <div key={message.id} className={`group relative flex max-w-[92%] flex-none flex-col sm:max-w-[82%] ${message.from === "you" ? "self-end items-end" : "self-start items-start"} ${reactions.length ? "pb-2" : ""}`}>
               <div data-message-bubble className={`relative w-fit max-w-full rounded-2xl border px-3.5 pt-2 ${reactions.length ? "pb-5" : "pb-2"} text-sm leading-5 sm:px-4 ${message.replyTo ? "min-w-[160px]" : ""} ${message.from === "you" ? "rounded-br-md border-[#dfc941] bg-[#ffe96b] text-[#17182d] shadow-[0_2px_0_#e4d04d]" : "rounded-bl-md border-[#ddd5f2] bg-white text-[#343247] shadow-sm"}`}>
                 {message.replyTo && <div className={`mb-1 flex min-w-0 flex-col items-start gap-0 rounded-md border-l-2 px-2 py-1 ${message.from === "you" ? "border-[#7660dc] bg-white/45" : "border-[#7660dc] bg-[#f3efff]"}`}><span className="max-w-full truncate text-[10px] font-bold leading-3 text-[#5947a8]">{message.replyTo.from === "you" ? "You" : message.replyTo.name}</span><span className="max-w-full truncate text-[11px] leading-4 text-[#514e62]">{message.replyTo.text}</span></div>}
-                <div className="flex w-fit max-w-full items-end gap-1">
-                  <p className={`min-w-0 max-w-full whitespace-pre-wrap break-words ${singleEmoji ? "text-2xl leading-[1.15]" : ""}`}>{message.text}</p>
-                  <div className={`flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] leading-3 ${message.from === "you" ? "text-[#625b37]" : "text-[#858191]"}`}><button type="button" onClick={(event) => toggleReactionPicker(event, message.id)} aria-label="Add reaction" title="React to message" className="ml-1 rounded p-0.5 text-[#777386] transition hover:bg-black/5 hover:text-[#5947a8] opacity-100 md:opacity-0 md:group-hover:opacity-100"><Smile size={15}/></button><button type="button" onClick={(event) => toggleMessageMenu(event, message.id)} aria-label="Message options" title="Message options" className="rounded p-0.5 text-[#777386] opacity-100 transition hover:bg-black/5 hover:text-[#17182d] md:opacity-0 md:group-hover:opacity-100"><MoreHorizontal size={15}/></button>{message.editedAt && <span>Edited ·</span>}<time>{messageTime(message.createdAt)}</time>{message.from === "you" && message.id === latestOutgoingId && <span aria-label={message.readAt ? "Seen" : "Sent"}>· {message.readAt ? "Seen" : "Sent"}</span>}</div>
-                </div>
+                {!message.media?.url && <div className="flex w-fit max-w-full items-end gap-1">
+                  {message.text && <p className={`min-w-0 max-w-full whitespace-pre-wrap break-words ${singleEmoji ? "text-2xl leading-[1.15]" : ""}`}>{message.text}</p>}
+                  <div className={`flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] leading-3 ${message.from === "you" ? "text-[#625b37]" : "text-[#858191]"}`}>{messageActions}</div>
+                </div>}
+                {message.media?.url && message.text && <p className="max-w-full whitespace-pre-wrap break-words">{message.text}</p>}
+                {message.media?.url && <div className="mb-1 mt-2 max-w-full overflow-hidden rounded-xl border border-black/10 bg-white/70">
+                  {message.media.type === "image" ? <a href={message.media.url} target="_blank" rel="noreferrer" aria-label={`Open ${message.media.name || "shared image"}`}><img src={message.media.url} alt={message.media.name || "Shared image"} loading="lazy" decoding="async" className="max-h-72 max-w-full object-contain" /></a>
+                    : message.media.type === "video" ? <video src={message.media.url} controls preload="metadata" className="max-h-72 w-full max-w-[min(22rem,75vw)] bg-black" aria-label={message.media.name || "Shared video"} />
+                      : <a href={message.media.url} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-2.5 px-3 py-2.5 transition hover:bg-white"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#eee9ff] text-[#6f56d9]"><FileText size={18}/></span><span className="min-w-0 flex-1"><span className="block max-w-48 truncate text-xs font-semibold">{message.media.name || "Shared PDF"}</span><span className="text-[10px] uppercase tracking-wide text-[#858191]">PDF document</span></span><ExternalLink size={14} className="shrink-0 text-[#6f56d9]"/></a>}
+                </div>}
+                {message.media?.url && <div className={`mt-1 flex items-center justify-end gap-1 whitespace-nowrap text-[10px] leading-3 ${message.from === "you" ? "text-[#625b37]" : "text-[#858191]"}`}>{messageActions}</div>}
                 {reactions.length > 0 && <div className="absolute -bottom-2 left-2 z-10 flex max-w-[85%] flex-wrap justify-start gap-1">{reactions.map(({ emoji, count, selected }) => <button key={emoji} type="button" onClick={() => reactToMessage(message, emoji)} aria-label={`${emoji}, ${count} reactions`} className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs shadow-[0_2px_5px_rgba(25,26,50,0.16)] ${selected ? "border-[#b9a9ff] bg-[#f0ebff]" : "border-[#d7d1e4] bg-white"}`}>{emoji} <span className="text-[10px] font-semibold text-[#514e62]">{count}</span></button>)}</div>}
               </div>
             </div>;
@@ -421,6 +502,11 @@ export default function Messages() {
             <div className="min-w-0 flex-1"><p className="text-[11px] font-bold text-[#5947a8]">{editingMessageId ? "Editing message" : `Replying to ${replyingTo.name}`}</p>{replyingTo && <p className="truncate text-xs text-[#6e6a7b]">{replyingTo.text}</p>}</div>
             <button type="button" onClick={clearComposerModes} aria-label="Cancel reply or edit" className="rounded-lg p-1 text-[#6e6a7b] hover:bg-white"><X size={16}/></button>
           </div>}
+          {attachment && <div className="mb-2 flex min-w-0 items-center gap-3 rounded-xl border border-[#e7dfd0] bg-[#fffdf9] p-2.5">
+            {attachment.type === "image" && attachmentPreview ? <img src={attachmentPreview} alt="Selected image preview" className="h-12 w-12 shrink-0 rounded-lg object-cover"/> : attachment.type === "video" && attachmentPreview ? <video src={attachmentPreview} className="h-12 w-16 shrink-0 rounded-lg bg-black object-cover" muted/> : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#eee9ff] text-[#6f56d9]"><FileText size={20}/></span>}
+            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{attachment.file.name}</span><span className="text-[11px] text-[#858191]">{sending ? `Uploading · ${uploadProgress}%` : `${attachment.type.toUpperCase()} · ${(attachment.file.size / (1024 * 1024)).toFixed(1)} MB`}</span>{sending && <span className="mt-1 block h-1 overflow-hidden rounded-full bg-[#eee9ff]"><span className="block h-full rounded-full bg-[#7660dc] transition-all" style={{ width: `${uploadProgress}%` }}/></span>}</span>
+            {!sending && <button type="button" onClick={clearAttachment} aria-label="Remove attachment" className="rounded-lg p-1.5 text-[#777386] transition hover:bg-[#f4f0e8]"><X size={16}/></button>}
+          </div>}
           <div className="flex items-end gap-2 sm:gap-3">
             <div className="relative shrink-0">
               <button type="button" onClick={() => setEmojiPickerOpen((open) => !open)} aria-label="Choose emoji" title="Choose emoji" className={`flex h-11 w-11 items-center justify-center rounded-xl border border-[#e7dfd0] transition hover:bg-[#f4f0e8] ${emojiPickerOpen ? "bg-[#eee9ff] text-[#5947a8]" : "bg-white text-[#6e6a7b]"}`}><Smile size={19}/></button>
@@ -429,8 +515,10 @@ export default function Messages() {
                 <div className="max-h-56 overflow-y-auto p-2"><p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-[#858191]">{emojiCategory}</p><div className="grid grid-cols-8 gap-0.5">{(EMOJI_CATEGORIES.find(({ name }) => name === emojiCategory)?.emojis || []).map((emoji, index) => <button key={`${emoji}-${index}`} type="button" onClick={() => appendEmoji(emoji)} aria-label={`Add ${emoji}`} className="flex h-9 items-center justify-center rounded-lg text-xl transition hover:bg-[#f4f0e8]">{emoji}</button>)}</div></div>
               </div>}
             </div>
+            <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf,.pdf" onChange={chooseAttachment} className="hidden" aria-label="Choose image, PDF, or video" />
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending || Boolean(editingMessageId)} aria-label="Attach image, PDF, or video" title="Attach image, PDF, or video" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#e7dfd0] bg-white text-[#6e6a7b] transition hover:bg-[#f4f0e8] hover:text-[#5947a8] disabled:cursor-not-allowed disabled:opacity-40"><Paperclip size={19}/></button>
             <input ref={composerRef} value={draft} onChange={handleDraftChange} maxLength={2000} placeholder={editingMessageId ? "Edit your message…" : replyingTo ? `Reply to ${replyingTo.name}…` : `Message ${active.name.split(" ")[0]}…`} className="min-h-11 min-w-0 flex-1 rounded-2xl border-2 border-[#e7dfd0] bg-[#fffdf9] px-4 py-2.5 text-sm outline-none transition focus:border-[#7660dc]"/>
-            <button type="submit" disabled={!draft.trim() || sending} aria-label={editingMessageId ? "Save message" : "Send message"} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-[#191a32] bg-[#ffe35b] px-3.5 font-bold text-black shadow-[0_3px_0_#191a32] transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-50 sm:px-4">{sending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#17182d]/30 border-t-[#17182d]" /> : editingMessageId ? <Check size={17}/> : <Send size={17}/>}<span className="hidden sm:inline">{sending ? "Saving…" : editingMessageId ? "Save" : "Send"}</span></button>
+            <button type="submit" disabled={(!draft.trim() && !attachment) || sending} aria-label={editingMessageId ? "Save message" : "Send message"} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-[#191a32] bg-[#ffe35b] px-3.5 font-bold text-black shadow-[0_3px_0_#191a32] transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-50 sm:px-4">{sending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#17182d]/30 border-t-[#17182d]" /> : editingMessageId ? <Check size={17}/> : <Send size={17}/>}<span className="hidden sm:inline">{sending ? attachment ? `Uploading ${uploadProgress}%` : "Saving…" : editingMessageId ? "Save" : "Send"}</span></button>
           </div>
         </form>
       </div> : <div className="hidden min-h-0 flex-col items-center justify-center bg-[#faf8f3] p-8 text-center text-[#858191] md:flex"><span className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-[#191a32] bg-[#eee9ff] text-[#5947a8] shadow-[3px_4px_0_#c9bcff]"><MessageCircle size={30}/></span><p className="mt-5 font-semibold text-[#514e62]">Choose a conversation to get started.</p><p className="mt-1 text-sm">A quick hello can turn into something great.</p></div>}
