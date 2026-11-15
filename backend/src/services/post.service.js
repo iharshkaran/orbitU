@@ -38,7 +38,7 @@ export async function listPosts({ userId, authorId, page = 1, limit = 20 }) {
   for (const comment of comments) {
     const key = String(comment.post);
     const values = commentMap.get(key) || [];
-    values.push({ id: String(comment._id), name: comment.author?.name || "Student", photo: comment.author?.photo || "", text: comment.text, createdAt: comment.createdAt });
+    values.push({ id: String(comment._id), authorId: String(comment.author?._id || comment.author), parentId: comment.parentComment ? String(comment.parentComment) : null, name: comment.author?.name || "Student", photo: comment.author?.photo || "", text: comment.text, createdAt: comment.createdAt, updatedAt: comment.updatedAt });
     commentMap.set(key, values);
   }
   const countMap = new Map(counts.map((item) => [String(item._id), item.count]));
@@ -60,7 +60,7 @@ export async function getPostById({ postId, userId }) {
     Like.countDocuments({ post: post._id }),
     Like.exists({ post: post._id, user: userId }),
   ]);
-  const formattedComments = comments.map((comment) => ({ id: String(comment._id), name: comment.author?.name || "Student", photo: comment.author?.photo || "", text: comment.text, createdAt: comment.createdAt }));
+  const formattedComments = comments.map((comment) => ({ id: String(comment._id), authorId: String(comment.author?._id || comment.author), parentId: comment.parentComment ? String(comment.parentComment) : null, name: comment.author?.name || "Student", photo: comment.author?.photo || "", text: comment.text, createdAt: comment.createdAt, updatedAt: comment.updatedAt }));
   return formatPost(post, { likes, liked: Boolean(liked), comments: formattedComments });
 }
 
